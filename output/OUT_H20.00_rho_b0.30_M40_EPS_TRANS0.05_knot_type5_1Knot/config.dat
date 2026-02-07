@@ -1,0 +1,9 @@
+# Simulation Configuration
+polymer_type: ring
+M: 40
+init_N: 64
+rho_b: 0.300000
+box_xy: 20.655911
+H: 20.000000
+rcut: 1.000000
+max_N: 213

@@ -1,0 +1,6 @@
+end_rho_avg 0.040365
+average_mu 3.711320
+eps_trans 0.020000
+K_MAX 6
+ Block 3 trans acceptance: 0.4239, rot acceptance: 0.6662
+ Block 3 insert acceptance: 0.0888, delete acceptance: 0.0889

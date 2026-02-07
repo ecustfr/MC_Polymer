@@ -1,0 +1,30 @@
+{
+    "input_params": {
+        "polymer_type": "ring",
+        "knot_type": "5_1Knot",
+        "configuration": "input/init_config_Z/5_1KnotN64M40H20.00rho0.50.dat",
+        "mu_b": 0.870821,
+        "M": 40,
+        "init_N": 64,
+        "rho_b": 0.5,
+        "box_xy": 16.0,
+        "H": 20.0,
+        "rcut": 1.0,
+        "max_N": 128,
+        "potential_type": "None"
+    },
+    "simulation_params": {
+        "EPS_TRANS": 0.02,
+        "ROT_RATIO": 0.3,
+        "K_MAX": 10,
+        "sample_interval": 100,
+        "sample_time": 40000,
+        "sample_block": 4,
+        "dz": 0.02
+    },
+    "Vext_params": {},
+    "output_params": {
+        "output_dir": "output/OUT_config_0016_Knot5_1Knot_H20.0_rho0.50",
+        "output_prefix": "mc_sim_5_1Knot_H20.0_rho0.50_M40"
+    }
+}

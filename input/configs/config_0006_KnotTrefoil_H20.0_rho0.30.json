@@ -1,0 +1,30 @@
+{
+    "input_params": {
+        "polymer_type": "ring",
+        "knot_type": "Trefoil",
+        "configuration": "input/init_config_Z/TrefoilN64M40H20.00rho0.30.dat",
+        "mu_b": 0.870821,
+        "M": 40,
+        "init_N": 64,
+        "rho_b": 0.3,
+        "box_xy": 20.65591117977289,
+        "H": 20.0,
+        "rcut": 1.0,
+        "max_N": 213,
+        "potential_type": "None"
+    },
+    "simulation_params": {
+        "EPS_TRANS": 0.05,
+        "ROT_RATIO": 0.3,
+        "K_MAX": 10,
+        "sample_interval": 100,
+        "sample_time": 40000,
+        "sample_block": 4,
+        "dz": 0.02
+    },
+    "Vext_params": {},
+    "output_params": {
+        "output_dir": "output/OUT_config_0006_KnotTrefoil_H20.0_rho0.30",
+        "output_prefix": "mc_sim_Trefoil_H20.0_rho0.30_M40"
+    }
+}

@@ -1,0 +1,83 @@
+# ===================================================
+# C++ / C 相关忽略规则
+# ===================================================
+# 编译生成的中间对象文件
+*.o
+*.obj
+*.chi
+*.pdb
+*.idb
+
+# 静态库与动态库
+*.lib
+*.a
+*.la
+*.lo
+*.dll
+*.so
+*.so.*
+*.dylib
+
+# 可执行文件
+*.exe
+*.out
+*.app
+# 常见的编译输出目录
+bin/
+obj/
+build/
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+
+# ===================================================
+# Python 相关忽略规则
+# ===================================================
+# 字节码缓存
+__pycache__/
+*.py[cod]
+*$py.class
+
+# 虚拟环境 (最重要，防止上传巨大的环境目录)
+venv/
+.venv/
+env/
+ENV/
+bin/
+lib/
+include/
+pip-delete-this-directory.txt
+
+# 分发/打包输出
+dist/
+build/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# 单元测试/覆盖率
+.tox/
+.coverage
+.cache
+nosetests.xml
+coverage.xml
+htmlcov/
+.pytest_cache/
+
+# ===================================================
+# 通用规则 (IDE、系统、日志)
+# ===================================================
+.vscode/
+.idea/
+*.swp
+*.log
+.DS_Store
+Thumbs.db
+
+# 敏感文件
+.env
+
+#markdown except for readme
+*.md
+!README.md

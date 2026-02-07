@@ -1,0 +1,30 @@
+{
+    "input_params": {
+        "polymer_type": "Linear",
+        "knot_type": "Linear",
+        "configuration": "input/init_config_Z/LinearN64M8H20.00rho0.10.dat",
+        "mu_b": 0.870821,
+        "M": 8,
+        "init_N": 64,
+        "rho_b": 0.1,
+        "box_xy": 16.0,
+        "H": 20.0,
+        "rcut": 1.0,
+        "max_N": 640,
+        "potential_type": "custom"
+    },
+    "simulation_params": {
+        "EPS_TRANS": 0.1,
+        "ROT_RATIO": 0.3,
+        "K_MAX": 10,
+        "sample_interval": 100,
+        "sample_time": 40000,
+        "sample_block": 4,
+        "dz": 0.02
+    },
+    "Vext_params": {},
+    "output_params": {
+        "output_dir": "output/OUT_config_0003_Linear_H20.0_rho0.10",
+        "output_prefix": "mc_sim_Linear_H20.0_rho0.10_M8"
+    }
+}

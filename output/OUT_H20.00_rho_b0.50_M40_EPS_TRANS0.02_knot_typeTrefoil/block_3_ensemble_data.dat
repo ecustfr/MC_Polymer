@@ -1,0 +1,5 @@
+average_rg 2.188931
+eps_trans 0.004000
+K_MAX 10
+ Block 3 trans acceptance: 0.2475, rot acceptance: 0.7473
+ Block 3 insert acceptance: 0.0000, delete acceptance: 0.0000

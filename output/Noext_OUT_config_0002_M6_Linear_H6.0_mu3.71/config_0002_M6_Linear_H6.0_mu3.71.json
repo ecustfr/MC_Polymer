@@ -1,0 +1,30 @@
+{
+    "input_params": {
+        "polymer_type": "Linear",
+        "knot_type": "Linear",
+        "configuration": "input/init_config_Z/LinearN64M6H6.00rho0.10.dat",
+        "mu_b": 3.7061,
+        "M": 6,
+        "init_N": 64,
+        "rho_b": 0.1,
+        "box_xy": 25.298221281347033,
+        "H": 6.0,
+        "rcut": 1.0,
+        "max_N": 639,
+        "external_potential": "None"
+    },
+    "simulation_params": {
+        "EPS_TRANS": 0.05,
+        "ROT_RATIO": 0.3,
+        "K_MAX": 6,
+        "sample_interval": 10,
+        "sample_time": 40000,
+        "sample_block": 4,
+        "dz": 0.05
+    },
+    "Vext_params": {},
+    "output_params": {
+        "output_dir": "output/OUT_config_0002_M6_Linear_H6.0_mu3.71",
+        "output_prefix": "mc_sim_Linear_H6.0_mub3.71_M6"
+    }
+}

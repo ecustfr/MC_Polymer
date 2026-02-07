@@ -1,0 +1,9 @@
+# Simulation Configuration
+polymer_type: Linear
+M: 6
+init_N: 64
+rho_b: 0.100000
+box_xy: 25.298221
+H: 6.000000
+rcut: 1.000000
+max_N: 639
