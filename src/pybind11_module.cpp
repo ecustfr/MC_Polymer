@@ -123,16 +123,7 @@ PYBIND11_MODULE(pymcpolymer, m) {
              "Calculate external potential at position z")
         .def("Vext_bz", &MuVT_MC_LinearPolymer::Vext_bz,
              py::arg("pos"),
-             "Calculate Boltzmann factor for external potential")
-        .def("export_potential_table", &MuVT_MC_LinearPolymer::export_potential_table,
-             py::arg("filename"),
-             "Export potential table to file")
-             
-        .def("get_potential_table", &MuVT_MC_LinearPolymer::get_potential_table,
-             "Get potential table values")
-        .def("get_potential_table_z", &MuVT_MC_LinearPolymer::get_potential_table_z,
-             "Get z coordinates corresponding to potential table values");
-
+             "Calculate Boltzmann factor for external potential");
 
     // Bind MuVT_MC_RingPolymer class (inherits from MuVT_MC_LinearPolymer)
     py::class_<MuVT_MC_RingPolymer, MuVT_MC_LinearPolymer>(m, "MuVT_MC_RingPolymer")

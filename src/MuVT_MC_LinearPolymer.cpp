@@ -1475,7 +1475,7 @@ void MuVT_MC_LinearPolymer::trans_move(int polymer_index)
 }
 //-------------------------------------------------------------------------------------------------------------------------
 //------判断重叠类函数 ------------------------------------------------------------------------------------------------------
-bool MuVT_MC_LinearPolymer::overlap_two_particle(double *r_try, int monomer_index)
+bool MuVT_MC_LinearPolymer::overlap_two_particle(const double *r_try, int monomer_index)
 {
     int temp_dis_int;
     double temp_dis=0 ;
@@ -1511,7 +1511,7 @@ bool MuVT_MC_LinearPolymer::overlap_two_particle(double *r_try, int monomer_inde
 }
 
 // 判断插入聚合物时是否与其他单体重叠
-bool MuVT_MC_LinearPolymer::overlap_insert_polymer(std::array<double,3> &r_try,int parent_index,std::vector< std::array<double, 3> > &r_config , std::vector<int> &cal_list )
+bool MuVT_MC_LinearPolymer::overlap_insert_polymer(const std::array<double,3> &r_try,int parent_index,const std::vector<std::array<double, 3>> &r_config , const std::vector<int> &cal_list )
 {
     for(const auto& index : cal_list)
     {
@@ -1530,7 +1530,7 @@ bool MuVT_MC_LinearPolymer::overlap_insert_polymer(std::array<double,3> &r_try,i
     return false;
 }
 
-bool MuVT_MC_LinearPolymer::overlap_other_polymer(double *r_try, int now_polymer_index)
+bool MuVT_MC_LinearPolymer::overlap_other_polymer(const double *r_try, int now_polymer_index)
 {
     // 判断当前 聚合物与 其它聚合物有无重叠
     if(this->MN_now > this-> cl_threshold)
@@ -1559,7 +1559,7 @@ bool MuVT_MC_LinearPolymer::overlap_other_polymer(double *r_try, int now_polymer
         return false;
     }
 }
-bool MuVT_MC_LinearPolymer::overlap_other_monomer(double *r_try, int polymer_index , std::vector<int> &cal_list)
+bool MuVT_MC_LinearPolymer::overlap_other_monomer(const double *r_try, int polymer_index , const std::vector<int> &cal_list)
 {
     for(const auto& index : cal_list)
     {
@@ -1570,7 +1570,7 @@ bool MuVT_MC_LinearPolymer::overlap_other_monomer(double *r_try, int polymer_ind
     }
     return false;
 }
-bool MuVT_MC_LinearPolymer::overlap_other_monomer_one(const double *r_try, const double *r_other)
+bool MuVT_MC_LinearPolymer::overlap_other_monomer_one(const double *r_other, const double *r_try)
 {
 
     if(r_try[2] > this->H - 0.5 || r_try[2] < 0.5)
@@ -2196,45 +2196,3 @@ bool MuVT_MC_LinearPolymer::insert_recursive(
     return insert_recursive(next_idx + step, next_idx, step, total_W, r_new, is_inserted, k_max);
 }
 
-// 将打表数据输出到文件
-void MuVT_MC_LinearPolymer::export_potential_table(const std::string& filename) const
-{
-    std::ofstream outfile(filename);
-    if (!outfile) {
-        std::cerr << "Error: Cannot open file " << filename << " for writing." << std::endl;
-        return;
-    }
-
-    // 写入表头
-    outfile << "# z \t V_ext(z)" << std::endl;
-    outfile << "# Potential table for " << V_ext_name << std::endl;
-    outfile << "# Table step dz: " << table_dz << std::endl;
-    outfile << "# Number of points: " << z_field_table.size() << std::endl;
-
-    // 写入数据
-    for (size_t i = 0; i < z_field_table.size(); ++i) {
-        double z = i * table_dz;
-        z = std::min(z, H); // 确保不超过 H
-        outfile << z << "\t" << z_field_table[i] << std::endl;
-    }
-
-    outfile.close();
-    std::cout << "Potential table exported to " << filename << std::endl;
-}
-
-// 返回打表数据给 Python 接口
-std::vector<double> MuVT_MC_LinearPolymer::get_potential_table() const
-{
-    return z_field_table;
-}
-
-// 返回打表对应的 z 坐标
-std::vector<double> MuVT_MC_LinearPolymer::get_potential_table_z() const
-{
-    std::vector<double> z_values(z_field_table.size());
-    for (size_t i = 0; i < z_field_table.size(); ++i) {
-        double z = i * table_dz;
-        z_values[i] = std::min(z, H); // 确保不超过 H
-    }
-    return z_values;
-}
