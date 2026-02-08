@@ -46,7 +46,6 @@ env/
 ENV/
 bin/
 lib/
-include/
 pip-delete-this-directory.txt
 
 # 分发/打包输出
