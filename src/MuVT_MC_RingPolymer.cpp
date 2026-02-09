@@ -182,23 +182,7 @@ bool MuVT_MC_RingPolymer::insert_one_monomer(std::vector<std::array<double, 3>> 
     if (monomer_index == 0)
     {
         
-        candidate_positions[0][0] = box_size[0] * uni_dis(gen);
-        candidate_positions[0][1] = box_size[1] * uni_dis(gen);
-        candidate_positions[0][2] = box_size[2] * uni_dis(gen);
-        if (this->overlap_all_other_polymer(candidate_positions[0].data()))
-        {
-            *Z_eff = 0.0;
-            return false; // 插入失败
-        }
-        else
-        {
-            z_weights[0] = this->Vext_bz(candidate_positions[0].data());
-            *Z_eff *= z_weights[0];
-            r_new[0] = candidate_positions[0];
-            return true; // 插入成功
-        }
-        // 生成k_max个候选位置
-        /*
+
         for (int k = 0; k < k_max; k++)
         {
             candidate_positions[k][0] = box_size[0] * uni_dis(gen);
@@ -216,7 +200,7 @@ bool MuVT_MC_RingPolymer::insert_one_monomer(std::vector<std::array<double, 3>> 
                 z_weights[k] = this->Vext_bz(candidate_positions[k].data());
             }
         }
-        */
+        
     }
     else if (monomer_index == this->M - 1)
     {
@@ -287,10 +271,9 @@ bool MuVT_MC_RingPolymer::insert_one_monomer(std::vector<std::array<double, 3>> 
             if (z_weights[k] != 0.0)
             {
                 // 计算两点之间的距离
-                double dx = r_new[0][0] - candidate_positions[k][0];
-                double dy = r_new[0][1] - candidate_positions[k][1];
-                double dz = r_new[0][2] - candidate_positions[k][2];
-                double R = sqrt(dx * dx + dy * dy + dz * dz);
+
+                double R = distance_array(r_new[0], candidate_positions[k]);
+                
                 // 使用打表法计算路径概率 P_road
                 P_road[k] = g_p_road_table.get_P_road(R, grow_step);
                 // 计算外势玻尔兹曼因子 还有 P_road
@@ -333,9 +316,7 @@ void MuVT_MC_RingPolymer::delete_one_monomer(std::vector<std::array<double, 3>> 
     // 对于最后一个单体，需要考虑与第一个单体的连接
     if (monomer_index == 0) // for first monomer
     {
-        *Z_eff *= this->Vext_bz(r_delete[0].data());
-        return;
-        /*
+        
         for (int k = 0; k < k_max-1; k++)
         {
             candidate_positions[k][0] = box_size[0] * uni_dis(gen);
@@ -354,7 +335,7 @@ void MuVT_MC_RingPolymer::delete_one_monomer(std::vector<std::array<double, 3>> 
             }
         }
         z_eff[k_max-1]= this->Vext_bz(r_delete[0].data());
-        */
+        
     }
     else if (monomer_index == this->M - 1) // for last monomer
     {
@@ -404,20 +385,14 @@ void MuVT_MC_RingPolymer::delete_one_monomer(std::vector<std::array<double, 3>> 
             }
             else
             {
-                double dx = r_delete[0][0] - candidate_positions[k][0];
-                double dy = r_delete[0][1] - candidate_positions[k][1];
-                double dz = r_delete[0][2] - candidate_positions[k][2];
-                double R = sqrt(dx * dx + dy * dy + dz * dz);
+                double R = distance_array(r_delete[0], candidate_positions[k]);
                 P_road[k] = g_p_road_table.get_P_road(R,grow_step);
                 z_eff[k] = this->Vext_bz(candidate_positions[k].data()) * P_road[k];
             }
         }
 
-        double dx = r_delete[0][0] - r_delete[monomer_index][0];
-        double dy = r_delete[0][1] - r_delete[monomer_index][1];
-        double dz = r_delete[0][2] - r_delete[monomer_index][2];
-        double R = sqrt(dx * dx + dy * dy + dz * dz);
 
+        double R = distance_array(r_delete[0], r_delete[monomer_index]);
         P_road[k_max - 1] = g_p_road_table.get_P_road(R,grow_step);
         z_eff[k_max - 1] = this->Vext_bz(r_delete[monomer_index].data()) * P_road[k_max - 1];
        // std::cout << "R:"<<R << " "<<"try_num:"<<grow_step <<std::endl;
@@ -577,10 +552,7 @@ bool MuVT_MC_RingPolymer::insert_recursive_ring(
             }
             else
             {
-                double dx = r_new[0][0] - candidates[k][0];
-                double dy = r_new[0][1] - candidates[k][1];
-                double dz = r_new[0][2] - candidates[k][2];
-                double R = sqrt(dx * dx + dy * dy + dz * dz);
+                double R = distance_array(r_new[0], candidates[k]);
                 // 使用打表法计算路径概率 P_road
                 P_road[k] = g_p_road_table.get_P_road(R, grow_step);
                 z_weight[k] = this->Vext_bz(candidates[k].data()) * P_road[k];

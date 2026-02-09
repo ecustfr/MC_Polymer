@@ -6,7 +6,8 @@
 #include <fstream>
 #include <iostream>
 #include <string>
-
+#include <cmath>
+#include <array>
 // Record 2D data
 void sample_item(std::ofstream &file, bool time_or_not, const int time, double **data, const int row, const int col);
 
@@ -32,6 +33,14 @@ bool acc_bias_or_not( double*  new_weight , double old_weight , int k_max , std:
 void read_line(std::ifstream &infile, const std::string label, int max_index, double *array);
 
 inline double SQR(double x) {return x*x;}
+
+inline double distance_array(const std::array<double, 3>& p1, const std::array<double, 3>& p2) 
+{
+    double dx = p1[0] - p2[0];
+    double dy = p1[1] - p2[1];
+    double dz = p1[2] - p2[2];
+    return std::sqrt(dx * dx + dy * dy + dz * dz);
+}
 
 // Find last monomer position for ring polymer
 extern "C" void Find_Last(double *r1, double *r2, double **target, int kmax, double diameter);

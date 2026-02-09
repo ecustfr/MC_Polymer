@@ -173,7 +173,7 @@ def run_simulation(config):
 
 
     trace_file = f"{output_params['output_dir']}/{output_params['output_prefix']}_trajectory.xyz"
-    trace_recorder = TraceRecorder(trace_file)
+    # trace_recorder = TraceRecorder(trace_file)
     
 
 
@@ -212,8 +212,8 @@ def run_simulation(config):
             if step % simulation_params['sample_interval'] == 0:
                 
                 # Record trajectory (every 100 sample points)
-                if step % (simulation_params['sample_interval'] * 100) == 0:
-                  trace_recorder.write_frame(mc_sys.r_total, mc_sys.get_N_now(), block * simulation_params['sample_time'] + step)
+                #if step % (simulation_params['sample_interval'] * 100) == 0:
+                  #trace_recorder.write_frame(mc_sys.r_total, mc_sys.get_N_now(), block * simulation_params['sample_time'] + step)
                 
                 #rho_profile.accumulate(mc_sys,lambda s,b,d :cal_mono_density_profile(s,b,d,static_mono))
                 rho_profile.accumulate(mc_sys,cal_density_profile)
@@ -229,13 +229,13 @@ def run_simulation(config):
                     lambda s,d,b :cal_G_profile(s,d,b,static_mono,simulation_params['K_MAX'], insert_time)
                     )
                 
-                W_insert.accumulate(mc_sys,lambda s:cal_W(s,simulation_params['K_MAX']) )
-                W_insert.accumulate(mc_sys,lambda s:cal_W(s,simulation_params['K_MAX']) )
+               
                 
                 """
                 W_insert.accumulate(mc_sys,lambda s:cal_W(s,simulation_params['K_MAX']) )
                 W_insert.accumulate(mc_sys,lambda s:cal_W(s,simulation_params['K_MAX']) )
-
+                W_insert.accumulate(mc_sys,lambda s:cal_W(s,simulation_params['K_MAX']) )
+                W_insert.accumulate(mc_sys,lambda s:cal_W(s,simulation_params['K_MAX']) )
                 
         
         # End block
@@ -307,7 +307,7 @@ def run_simulation(config):
         print(f"--- Block {block} ended ---")
     
     # Close trajectory recorder
-    trace_recorder.close()
+    # trace_recorder.close()
     
     
     # Save simulation configuration to file
