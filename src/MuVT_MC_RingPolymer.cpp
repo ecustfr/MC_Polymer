@@ -181,7 +181,24 @@ bool MuVT_MC_RingPolymer::insert_one_monomer(std::vector<std::array<double, 3>> 
     int grow_step = this->M - monomer_index;
     if (monomer_index == 0)
     {
+        
+        candidate_positions[0][0] = box_size[0] * uni_dis(gen);
+        candidate_positions[0][1] = box_size[1] * uni_dis(gen);
+        candidate_positions[0][2] = box_size[2] * uni_dis(gen);
+        if (this->overlap_all_other_polymer(candidate_positions[0].data()))
+        {
+            *Z_eff = 0.0;
+            return false; // 插入失败
+        }
+        else
+        {
+            z_weights[0] = this->Vext_bz(candidate_positions[0].data());
+            *Z_eff *= z_weights[0];
+            r_new[0] = candidate_positions[0];
+            return true; // 插入成功
+        }
         // 生成k_max个候选位置
+        /*
         for (int k = 0; k < k_max; k++)
         {
             candidate_positions[k][0] = box_size[0] * uni_dis(gen);
@@ -199,11 +216,51 @@ bool MuVT_MC_RingPolymer::insert_one_monomer(std::vector<std::array<double, 3>> 
                 z_weights[k] = this->Vext_bz(candidate_positions[k].data());
             }
         }
+        */
     }
-    else if (monomer_index < this->M - 1)
+    else if (monomer_index == this->M - 1)
     {
-        // 从当前单体位置生成k_max个随机方向
+          // 使用 Find_Last 方法生成 k_max 个候选位置
+        std::vector<double *> candidate_ptrs(k_max);
+
+        for (int i = 0; i < k_max; i++)
+        {
+            candidate_ptrs[i] = candidate_positions[i].data();
+        }
+        // 计算从倒数第二个单体到第一个单体的方向向量
+        // 使用 Find_Last 方法生成候选位置
+        this->Find_Last(r_new[this->M-2].data(), r_new[0].data(), candidate_ptrs.data(), k_max);
+
+        // 检查重叠并计算权重
         for (int k = 0; k < k_max; k++)
+        {
+
+            z_weights[k] = this->Vext_bz(candidate_ptrs[k]);
+            // 检查与其他聚合物的重叠
+            if (this->overlap_all_other_polymer(candidate_ptrs[k]))
+            {
+                z_weights[k] = 0.0;
+                continue;
+            }
+
+            // 检查与当前链的重叠
+            for (int j = 1; j < this->M-2; j++)
+            {
+                if (this->overlap_other_monomer_one(r_new[j].data(), candidate_ptrs[k]))
+                {
+                    z_weights[k] = 0.0;
+                    break;
+                }
+            }
+
+
+        }
+
+      
+    }
+    else // middle monomer 
+    {
+          for (int k = 0; k < k_max; k++)
         {
             candidate_positions[k] = r_new[monomer_index - 1];
             add_random_unit_vector(candidate_positions[k].data(), gen);
@@ -212,6 +269,7 @@ bool MuVT_MC_RingPolymer::insert_one_monomer(std::vector<std::array<double, 3>> 
             if (this->overlap_all_other_polymer(candidate_positions[k].data()))
             {
                 z_weights[k] = 0.0;
+                P_road[k] = 0.0;
                 continue;
             }
 
@@ -221,6 +279,7 @@ bool MuVT_MC_RingPolymer::insert_one_monomer(std::vector<std::array<double, 3>> 
                 if (this->overlap_other_monomer_one(r_new[j].data(), candidate_positions[k].data()))
                 {
                     z_weights[k] = 0.0;
+                    P_road[k] = 0.0;
                     break;
                 }
             }
@@ -238,48 +297,7 @@ bool MuVT_MC_RingPolymer::insert_one_monomer(std::vector<std::array<double, 3>> 
                 z_weights[k] = this->Vext_bz(candidate_positions[k].data()) * P_road[k];
             }
         }
-    }
-    else // 最后一个单体，需要闭环
-    {
-        // 使用 Find_Last 方法生成 k_max 个候选位置
-        std::vector<double *> candidate_ptrs(k_max);
-
-        for (int i = 0; i < k_max; i++)
-        {
-            candidate_ptrs[i] = candidate_positions[i].data();
-        }
-        // 计算从倒数第二个单体到第一个单体的方向向量
-        // 使用 Find_Last 方法生成候选位置
-        this->Find_Last(r_new[monomer_index - 1].data(), r_new[0].data(), candidate_ptrs.data(), k_max);
-
-        // 检查重叠并计算权重
-        for (int k = 0; k < k_max; k++)
-        {
-
-            // 检查与其他聚合物的重叠
-            if (this->overlap_all_other_polymer(candidate_ptrs[k]))
-            {
-                z_weights[k] = 0.0;
-                continue;
-            }
-
-            // 检查与当前链的重叠
-            for (int j = 0; j < monomer_index - 1; j++)
-            {
-                if (this->overlap_other_monomer_one(r_new[j].data(), candidate_ptrs[k]))
-                {
-                    z_weights[k] = 0.0;
-                    break;
-                }
-            }
-
-            if (z_weights[k] != 0.0)
-            {
-                z_weights[k] = this->Vext_bz(candidate_ptrs[k]);
-            }
-        }
-
-        // 不需要复制，因为 Find_Last 方法已经直接修改了 candidate_positions 的数据
+      
     }
 
     // 计算总权重
@@ -288,7 +306,6 @@ bool MuVT_MC_RingPolymer::insert_one_monomer(std::vector<std::array<double, 3>> 
     {
         sum_z_eff += z_weights[k];
     }
-
     if (sum_z_eff == 0)
     {
         *Z_eff = 0;
@@ -311,52 +328,100 @@ void MuVT_MC_RingPolymer::delete_one_monomer(std::vector<std::array<double, 3>> 
     std::vector<std::array<double, 3>> candidate_positions(k_max);
     std::vector<double> z_eff(k_max, 1.0);
     std::vector<double> P_road(k_max, 1.0); // 把 k_max - 1 设成 老节点的位置
-    int grow_step = monomer_index + 1;
-
-    int behind_count = std::max(this->M - monomer_index - 2, 0);
-    std::vector<int> cal_index(behind_count);
-    std::iota(cal_index.begin(), cal_index.end(), monomer_index + 2);
+    int grow_step = this->M - monomer_index;
 
     // 对于最后一个单体，需要考虑与第一个单体的连接
-
-    for (int k = 0; k < k_max - 1; k++)
+    if (monomer_index == 0) // for first monomer
     {
-        candidate_positions[k] = r_delete[monomer_index + 1];
-        add_random_unit_vector(candidate_positions[k].data(), gen);
-        if (this->overlap_insert_polymer(candidate_positions[k], monomer_index + 1, r_delete, cal_index) || this->overlap_all_other_polymer(candidate_positions[k].data()))
+        *Z_eff *= this->Vext_bz(r_delete[0].data());
+        return;
+        /*
+        for (int k = 0; k < k_max-1; k++)
         {
-            z_eff[k] = 0.0;
-        }
-        else
-        {
-            if (monomer_index == 0)
+            candidate_positions[k][0] = box_size[0] * uni_dis(gen);
+            candidate_positions[k][1] = box_size[1] * uni_dis(gen);
+            candidate_positions[k][2] = box_size[2] * uni_dis(gen);
+
+            // 检查与其他单体的重叠
+            if (this->overlap_all_other_polymer(candidate_positions[k].data()))
             {
-                z_eff[k] = this->Vext_bz(candidate_positions[k].data());
+                z_eff[k] = 0.0;
             }
             else
             {
-                double dx = r_delete[M - 1][0] - candidate_positions[k][0];
-                double dy = r_delete[M - 1][1] - candidate_positions[k][1];
-                double dz = r_delete[M - 1][2] - candidate_positions[k][2];
+                // 计算外势玻尔兹曼因子
+                z_eff[k] = this->Vext_bz(candidate_positions[k].data());
+            }
+        }
+        z_eff[k_max-1]= this->Vext_bz(r_delete[0].data());
+        */
+    }
+    else if (monomer_index == this->M - 1) // for last monomer
+    {
+        std::vector<double *> candidate_ptrs(k_max-1);
+
+        for (int k = 0; k < k_max - 1; k++)
+        {
+            candidate_ptrs[k] = candidate_positions[k].data();
+        }
+        this->Find_Last(r_delete[this->M-2].data(), r_delete[0].data(), candidate_ptrs.data(), k_max-1);
+        for( int k = 0; k < k_max - 1; k++)
+        {
+            z_eff[k] = this->Vext_bz(candidate_positions[k].data());
+            if (this->overlap_all_other_polymer(candidate_positions[k].data()))
+            {
+                z_eff[k] = 0.0;
+                continue;
+            }
+            for (int j = 1; j < this->M - 2; j++)
+            {
+                if (this->overlap_other_monomer_one(r_delete[j].data(), candidate_positions[k].data()))
+                {
+                    z_eff[k] = 0.0;
+                    break;
+                }
+            }
+
+        }
+        z_eff[k_max - 1] = this->Vext_bz(r_delete[monomer_index].data());
+    }
+    else // for middle monomer
+    {
+        std::vector<int> cal_index;
+        for (int j = 0; j < monomer_index; j++)
+        {
+            cal_index.push_back(j);
+        }
+        for (int k = 0; k < k_max - 1; k++)
+        {
+            candidate_positions[k] = r_delete[monomer_index - 1];
+            add_random_unit_vector(candidate_positions[k].data(), gen);
+            // this->overlap_insert_polymer(candidate_positions[k], monomer_index + 1, r_delete, cal_index)
+            if (this->overlap_insert_polymer(candidate_positions[k], monomer_index - 1, r_delete, cal_index) || this->overlap_all_other_polymer(candidate_positions[k].data()))
+            {
+                z_eff[k] = 0.0;
+                P_road[k] = 0.0;
+            }
+            else
+            {
+                double dx = r_delete[0][0] - candidate_positions[k][0];
+                double dy = r_delete[0][1] - candidate_positions[k][1];
+                double dz = r_delete[0][2] - candidate_positions[k][2];
                 double R = sqrt(dx * dx + dy * dy + dz * dz);
-                P_road[k] = g_p_road_table.get_P_road(grow_step, R);
+                P_road[k] = g_p_road_table.get_P_road(R,grow_step);
                 z_eff[k] = this->Vext_bz(candidate_positions[k].data()) * P_road[k];
             }
         }
-    }
 
-    if (monomer_index == 0)
-    {
-        z_eff[k_max - 1] = this->Vext_bz(r_delete[monomer_index].data());
-    }
-    else
-    {
-        double dx = r_delete[M - 1][0] - r_delete[monomer_index][0];
-        double dy = r_delete[M - 1][1] - r_delete[monomer_index][1];
-        double dz = r_delete[M - 1][2] - r_delete[monomer_index][2];
+        double dx = r_delete[0][0] - r_delete[monomer_index][0];
+        double dy = r_delete[0][1] - r_delete[monomer_index][1];
+        double dz = r_delete[0][2] - r_delete[monomer_index][2];
         double R = sqrt(dx * dx + dy * dy + dz * dz);
-        P_road[k_max - 1] = g_p_road_table.get_P_road(grow_step, R);
+
+        P_road[k_max - 1] = g_p_road_table.get_P_road(R,grow_step);
         z_eff[k_max - 1] = this->Vext_bz(r_delete[monomer_index].data()) * P_road[k_max - 1];
+       // std::cout << "R:"<<R << " "<<"try_num:"<<grow_step <<std::endl;
+        //std::cout << "P_road:"<<P_road[k_max - 1] << std::endl;
     }
 
     double sum_z_eff = 0.0;
@@ -365,7 +430,7 @@ void MuVT_MC_RingPolymer::delete_one_monomer(std::vector<std::array<double, 3>> 
         sum_z_eff += z_eff[k];
     }
 
-    *Z_eff = sum_z_eff / k_max / P_road[k_max - 1];
+    *Z_eff *= sum_z_eff / k_max / P_road[k_max - 1];
     return;
 }
 
@@ -439,7 +504,9 @@ void MuVT_MC_RingPolymer::delete_move(int k_max, int delete_polymer_index)
             r_delete[i][j] = this->r_total[last_polymer_start + i][j];
         }
     }
-
+    int original_MN_now = this->MN_now;
+    this->MN_now -= this->M;
+    this->N_now -= 1;
     // 4. 更新cell列表，因为粒子位置已经改变
     if (this->MN_now > this->cl_threshold)
     {
@@ -447,20 +514,17 @@ void MuVT_MC_RingPolymer::delete_move(int k_max, int delete_polymer_index)
     }
 
     // 5. 先假设聚合物被删除
-    int original_MN_now = this->MN_now;
-    this->MN_now -= this->M;
-    this->N_now -= 1;
+
 
     // 6. 使用delete_one_monomer方法计算每个单体的权重
     double Z_eff = 1.0;
-    for (int monomer_index = 0; monomer_index < this->M - 1; monomer_index++)
+    for (int monomer_index = 0; monomer_index < this->M; monomer_index++)
     {
         this->delete_one_monomer(r_delete, &Z_eff, monomer_index, k_max);
     }
 
     // 7. 计算接受概率
     double acc_ratio = 1.0 / (Z_eff * this->exp_mu_b) * (this->N_now + 1) / this->V;
-
     // 8. 决定是否接受删除
     if (acc_ratio > uni_dis(this->gen))
     {
@@ -497,7 +561,6 @@ bool MuVT_MC_RingPolymer::insert_recursive_ring(
     std::vector<double> P_road(k_max, 0.0);
     double sum_z_weight = 0.0;
     int grow_step = this->M - next_idx;
-
 
     if (next_idx < this->M - 1)
     {
@@ -550,7 +613,7 @@ bool MuVT_MC_RingPolymer::insert_recursive_ring(
                     break;
                 }
             }
-            if (this->overlap_all_other_polymer(candidate_ptrs[k]) )
+            if (this->overlap_all_other_polymer(candidate_ptrs[k]))
             {
                 // z_weight[k] = 0;
                 // P_road[k] = 0.0;
@@ -580,46 +643,47 @@ bool MuVT_MC_RingPolymer::insert_recursive_ring(
 }
 
 // 新的递归插入方法，使用 insert_recursive_ring 方法
+
 void MuVT_MC_RingPolymer::insert_move_recursive_ring(int k_max)
 {
     this->num_insert++;
-    
+
     // 1. 初始化新聚合物的位置
     std::vector<std::array<double, 3>> r_new(this->M);
     std::vector<int> is_inserted;
     is_inserted.reserve(this->M);
     double Z_eff = 1.0;
-    
+
     // 2. 放置种子节点（第一个单体）在随机位置
     int first_insert_index = 0;
     for (int d = 0; d < 3; ++d)
     {
         r_new[first_insert_index][d] = this->box_size[d] * this->uni_dis(this->gen);
     }
-    
+
     // 3. 检查种子节点是否与其他聚合物重叠
     if (this->overlap_all_other_polymer(r_new[first_insert_index].data()))
     {
         return; // 种子节点重叠，插入失败
     }
-    
+
     // 标记种子节点为已插入
     is_inserted.push_back(first_insert_index);
-    
+
     // 4. 使用 insert_recursive_ring 方法递归插入剩余的单体
     if (!this->insert_recursive_ring(first_insert_index + 1, first_insert_index, Z_eff, r_new, is_inserted, k_max))
     {
         return; // 递归插入失败
     }
-    
+
     // 5. 计算接受概率
     double acc_ratio = this->exp_mu_b * Z_eff / (this->N_now + 1) * this->V;
-    
+
     // 6. 决定是否接受插入
     if (acc_ratio > this->uni_dis(this->gen))
     {
         this->acc_insert++;
-        
+
         // 7. 如果接受，更新系统状态
         for (int monomer_index = 0; monomer_index < this->M; monomer_index++)
         {
@@ -630,12 +694,12 @@ void MuVT_MC_RingPolymer::insert_move_recursive_ring(int k_max)
         }
         this->MN_now += this->M;
         this->N_now++;
-        
+
         if (this->MN_now > this->cl_threshold)
         {
             this->build_cell_list();
         }
     }
-    
+
     return;
 }

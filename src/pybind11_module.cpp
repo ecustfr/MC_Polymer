@@ -5,6 +5,7 @@
 
 #include "MuVT_MC_LinearPolymer.h"
 #include "MuVT_MC_RingPolymer.h"
+#include "Utils.h"
 
 namespace py = pybind11;
 
@@ -16,6 +17,18 @@ PYBIND11_MODULE(pymcpolymer, m) {
     m.def("add", [](int i, int j) {
         return i + j;
     }, "A simple function that adds two numbers");
+
+    // Add a function to access P_road table
+    m.def("get_P_road", [](double R, int try_num) {
+        return g_p_road_table.get_P_road(R, try_num);
+    }, "Get P_road value from lookup table for given R and try_num",
+       py::arg("R"),
+       py::arg("try_num"));
+
+    // Add a function to initialize P_road table
+    m.def("initialize_P_road_table", []() {
+        g_p_road_table.initialize();
+    }, "Initialize P_road lookup table");
 
     // Bind MuVT_MC_LinearPolymer class
     py::class_<MuVT_MC_LinearPolymer>(m, "MuVT_MC_LinearPolymer")
@@ -136,7 +149,25 @@ PYBIND11_MODULE(pymcpolymer, m) {
              py::arg("box_xy"),
              py::arg("H"),
              py::arg("rcut"),
-             py::arg("max_N"));
+             py::arg("max_N"))
+
+        .def("init_second", &MuVT_MC_RingPolymer::init_second)
+        .def("rot_polymer_move", &MuVT_MC_RingPolymer::rot_polymer_move,
+             py::arg("polymer_index"),
+             "Rotate polymer move for ring polymer")
+
+        .def("insert_move", py::overload_cast<int>(&MuVT_MC_RingPolymer::insert_move),
+             py::arg("k_max"),
+             "Insert a ring polymer with k_max candidate positions")
+        .def("insert_move_recursive_ring", &MuVT_MC_RingPolymer::insert_move_recursive_ring,
+             py::arg("k_max"),
+             "Recursively insert monomers for ring polymer")
+
+        
+        .def("delete_move", &MuVT_MC_RingPolymer::delete_move,
+             py::arg("k_max"),
+             py::arg("delete_index"),
+             "Delete a ring polymer with k_max candidate positions");
 
     // Overridden MC move methods are automatically inherited, no need to rebind
 

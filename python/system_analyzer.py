@@ -328,7 +328,7 @@ def cal_Wz_profile(sim:Any,dz:float,n_bins:int,monomer_index:int, k_max = 10 , i
 def cal_W(sim:Any,k_max:int):
     return sim.get_W_insert(k_max)
 
-    
-    
+def cal_W_ring(sim:Any,k_max:int):
+    return sim.get_W_insert_ring(k_max)
 if __name__ == "__main__":
     pass

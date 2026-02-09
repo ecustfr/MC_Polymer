@@ -53,7 +53,7 @@ public:
 
     // 单体操作方法
     virtual bool insert_one_monomer(std::vector<std::array<double, 3>> &r_new, double *W, int monomer_index, int k_max); // 插入单个单体
-    void delete_one_monomer(std::vector<std::array<double, 3>> &r_delete, double *W, int monomer_index, int k_max); // 删除单个单体 因为删除总能进行
+    virtual void delete_one_monomer(std::vector<std::array<double, 3>> &r_delete, double *W, int monomer_index, int k_max); // 删除单个单体 因为删除总能进行
     
     // 平移和旋转方法
     virtual void trans_move(int polymer_index); // 平移聚合物

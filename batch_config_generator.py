@@ -20,7 +20,7 @@ from external_potential import generate_vext_params
 # ==============================
 
 CURRENT_SCRIPT_DIR = Path(__file__).resolve().parent
-OUTPUT_ROOT = CURRENT_SCRIPT_DIR / "input" / "Linear_configs"
+OUTPUT_ROOT = CURRENT_SCRIPT_DIR / "input" / "Ring_configs"
 
 
 
@@ -46,8 +46,8 @@ BASE_CONFIG = {
         "ROT_RATIO": 0.3, 
         "K_MAX": 10,
         "sample_interval": 5, 
-        "sample_time": 100000, 
-        "sample_block": 2, 
+        "sample_time": 10000, 
+        "sample_block": 4, 
         "dz": 0.05
     },
     "Vext_params": {},
@@ -61,18 +61,20 @@ BASE_CONFIG = {
 # 耦合变量组 (H, rho_b, M, EPS_TRANS)
 
 #必须置入的变量
-MUST_INPUT = {"H":6.0,"knot_type":"Linear","init_N":64,"external_potential":"custom"} 
+
+MUST_INPUT = {"H":8.0,"polymer_type":"Ring","knot_type":"Trivial","init_N":64,"external_potential":"None"}
+# MUST_INPUT = {"H":6.0,"knot_type":"Linear","init_N":64,"external_potential":"custom"} 
 
 # 耦合变量
-COUPLED_GROUPS = [{"EPS_TRANS":0.05,"K_MAX":6}]
+COUPLED_GROUPS = [{"EPS_TRANS":0.05,"K_MAX":10}]
 for item in COUPLED_GROUPS:
      item.update(MUST_INPUT)
 
 
 INDEPENDENT_VARS = {
-    "M":[6],
+    "M":[8],
     "rho_b":[0.1],
-    "mu_b":[-1.52904,0.8272,3.7061]
+    "mu_b":[1.225130559]
 }
 
 
@@ -194,10 +196,10 @@ def main():
                 # 格式化文件名：去掉多余的0，保留必要精度
             fname_parts = [
                     f"config_{count:04d}",
-                    f"M{full_params["M"]}",
+                    f"M{full_params['M']:d}",
                     f"{full_params['knot_type']}",
                     f"H{full_params['H']:.1f}",
-                    f"mu{full_params["mu_b"]:.2f}",
+                    f"mu{full_params['mu_b']:.2f}"
             ]
             filename = "_".join(fname_parts) + ".json"
                 

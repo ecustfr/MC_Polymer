@@ -36,10 +36,11 @@ from system_analyzer import (
     cal_mono_density_profile,
     cal_W,
     cal_G_profile,
-    cal_Wz_profile
+    cal_Wz_profile,
+    cal_W_ring
 )
 from data_recorder import DataRecorder
-#from trace_recorder import TraceRecorder
+from trace_recorder import TraceRecorder
 
 
 def read_config(config_file):
@@ -69,7 +70,7 @@ def run_simulation(config):
     print(f"Output directory: {output_dir}")
     
     # Initialize simulation object
-    if input_params['polymer_type'] == 'ring':
+    if input_params['polymer_type'] == 'ring' or input_params['polymer_type'] == 'Ring':
         mc_sys = pymcpolymer.MuVT_MC_RingPolymer(
             input_params['configuration'],
             input_params['mu_b'],
@@ -163,16 +164,16 @@ def run_simulation(config):
 
     rho_profile = DistributionAnalyzer(name = "rho_two_profile", dz=dz , bins=n_bins)
     
-    G_profile = DistributionAnalyzer(name = "GLGR" , dz = dz , bins = n_bins)
+   # G_profile = DistributionAnalyzer(name = "GLGR" , dz = dz , bins = n_bins)
     
     W_insert = GlobalPropertyAnalyzer(name = "mu")
 
-    Wz_insert = DistributionAnalyzer(name = "Wz_profile", dz=dz , bins=n_bins)
+    #Wz_insert = DistributionAnalyzer(name = "Wz_profile", dz=dz , bins=n_bins)
         # Initialize W_insert accumulation variables
 
 
-    #trace_file = f"{output_params['output_dir']}/{output_params['output_prefix']}_trajectory.xyz"
-    #trace_recorder = TraceRecorder(trace_file)
+    trace_file = f"{output_params['output_dir']}/{output_params['output_prefix']}_trajectory.xyz"
+    trace_recorder = TraceRecorder(trace_file)
     
 
 
@@ -186,8 +187,8 @@ def run_simulation(config):
     # Main simulation loop
     print(f"Starting simulation, {simulation_params['sample_block']} blocks, {simulation_params['sample_time']} steps per block")
     
-    static_mono = 2
-    insert_time = 800
+    #static_mono = 2
+    #insert_time = 800
     V = mc_sys.get_box_xy() * mc_sys.get_box_xy() * mc_sys.get_H()
     for block in range(simulation_params['sample_block']):
         print(f"\n--- Block {block} started ---")
@@ -201,34 +202,39 @@ def run_simulation(config):
                 print(f"  Block {block}, step {step}/{simulation_params['sample_time']}")
             
             mc_sys.mc_one_step_NVT()
-            mc_sys.mc_one_step_MuVT()
+            # mc_sys.mc_one_step_MuVT()
+            #mc_sys.insert_move_recursive_ring(simulation_params['K_MAX'])
+            mc_sys.insert_move(simulation_params['K_MAX'])
+            mc_sys.delete_move(simulation_params['K_MAX'], np.random.randint(0, mc_sys.get_N_now())   )
+            
             
             # Sample data periodically
             if step % simulation_params['sample_interval'] == 0:
                 
                 # Record trajectory (every 100 sample points)
-                #if step % (simulation_params['sample_interval'] * 100) == 0:
-                #    trace_recorder.write_frame(mc_sys.r_total, mc_sys.get_N_now(), block * simulation_params['sample_time'] + step)
+                if step % (simulation_params['sample_interval'] * 100) == 0:
+                  trace_recorder.write_frame(mc_sys.r_total, mc_sys.get_N_now(), block * simulation_params['sample_time'] + step)
                 
-                rho_profile.accumulate(mc_sys,lambda s,b,d :cal_mono_density_profile(s,b,d,static_mono))
-                #rho_profile.accumulate(mc_sys,cal_density_profile)
+                #rho_profile.accumulate(mc_sys,lambda s,b,d :cal_mono_density_profile(s,b,d,static_mono))
+                rho_profile.accumulate(mc_sys,cal_density_profile)
                 
+                """
                 Wz_insert.accumulate(
                     mc_sys,
                     lambda s,d,b :cal_Wz_profile(s,d,b,static_mono,simulation_params['K_MAX'], insert_time)
                 )
                 
-                """
                 G_profile.accumulate(
                     mc_sys,
                     lambda s,d,b :cal_G_profile(s,d,b,static_mono,simulation_params['K_MAX'], insert_time)
                     )
+                
+                W_insert.accumulate(mc_sys,lambda s:cal_W(s,simulation_params['K_MAX']) )
+                W_insert.accumulate(mc_sys,lambda s:cal_W(s,simulation_params['K_MAX']) )
+                
                 """
                 W_insert.accumulate(mc_sys,lambda s:cal_W(s,simulation_params['K_MAX']) )
                 W_insert.accumulate(mc_sys,lambda s:cal_W(s,simulation_params['K_MAX']) )
-                W_insert.accumulate(mc_sys,lambda s:cal_W(s,simulation_params['K_MAX']) )
-                W_insert.accumulate(mc_sys,lambda s:cal_W(s,simulation_params['K_MAX']) )
-                #distribution_analyzer.accumulate(mc_sys, calculate_density_profile)
 
                 
         
@@ -243,7 +249,7 @@ def run_simulation(config):
         # block_avg_rg_values = polymer_analyzer.get_average_values()
         block_avg_density_profile = rho_profile.average
         mu_block = -np.log(W_insert.average)
-        Wz_insert_average = -np.log(Wz_insert.average,where=(Wz_insert.average>0))
+        # Wz_insert_average = -np.log(Wz_insert.average,where=(Wz_insert.average>0))
         n_now = mc_sys.get_N_now()
 
         #block_overall_avg_rg = np.mean(block_avg_rg_values[:n_now])
@@ -251,7 +257,7 @@ def run_simulation(config):
         # Save current block results, only keep actual N_now rows
         # recorder.save(f"{output_params['output_dir']}/block_{block}_rg_values.dat", block_avg_rg_values[:n_now])
         recorder.save(f"{output_params['output_dir']}/block_{block}_{rho_profile.name}.dat", block_avg_density_profile)
-        recorder.save(f"{output_params['output_dir']}/block_{block}_{Wz_insert.name}.dat", Wz_insert_average)
+        #recorder.save(f"{output_params['output_dir']}/block_{block}_{Wz_insert.name}.dat", Wz_insert_average)
 
         
         # Save current block overall average radius of gyration, chemical potential, and simulation parameters
@@ -291,17 +297,17 @@ def run_simulation(config):
         mc_sys.set_sim_parameters(current_eps_trans, current_rot_ratio, current_k_max)
         
         # Reset analyzers to accumulate data from scratch for next block
-        G_profile.reset()
+        #G_profile.reset()
         rho_profile.reset()
         W_insert.reset()
-        Wz_insert.reset()        
+        #Wz_insert.reset()        
 
         
         # Save block results
         print(f"--- Block {block} ended ---")
     
     # Close trajectory recorder
-    # trace_recorder.close()
+    trace_recorder.close()
     
     
     # Save simulation configuration to file
@@ -327,7 +333,7 @@ def main():
     Main function
     """
     parser = argparse.ArgumentParser(description="Monte Carlo polymer simulation")
-    parser.add_argument('--config', '-c', type=str, default='config.json',
+    parser.add_argument('--config', '-c', type=str, default='config_0000_M8_Trivial_H8.0_mu1.23.json',
                         help='Path to configuration file')
     parser.add_argument('--monomer-index', '-m', type=int, default=-1,
                         help='Index of the monomer to analyze density for (-1 for all monomers)')

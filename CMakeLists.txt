@@ -3,13 +3,26 @@ cmake_minimum_required(VERSION 3.16)
 project(MuVTPolymer VERSION 1.0 LANGUAGES CXX)
 
 
+
+# 关键设置：指定源代码编码为 UTF-8
+
+
+# 对于 pybind11 项目特别重要
+add_compile_definitions(_SILENCE_CXX17_CODECVT_HEADER_DEPRECATION_WARNING)
+# 直接指定 conda 环境中的 Python
+set(CONDA_ENV_PATH "T:/anaconda/envs/mcpolymer")
+set(Python3_EXECUTABLE "${CONDA_ENV_PATH}/python.exe")
+message(STATUS "Using Python from: ${Python3_EXECUTABLE}")
+
+find_package(Python3 COMPONENTS Interpreter Development REQUIRED)
 # 设置C++标准
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-find_package(Python 3 COMPONENTS Interpreter Development REQUIRED)
+#set(python_DIR "T:/anaconda/envs/mcpolymer")
 
-set(pybind11_DIR "D:/myanaconda3/Lib/site-packages/pybind11/share/cmake/pybind11")
+# set(pybind11_DIR "D:/myanaconda3/Lib/site-packages/pybind11/share/cmake/pybind11")
+set(pybind11_DIR "T:/anaconda/envs/mcpolymer/Lib/site-packages/pybind11/share/cmake/pybind11")
 find_package(pybind11 CONFIG REQUIRED)
 
 # 设置包含目录
@@ -25,7 +38,7 @@ set(SOURCES
 add_library(MuVTPolymer src/MuVT_MC_LinearPolymer.cpp src/Utils.cpp src/MuVT_MC_RingPolymer)
 # === 添加 Python 模块 ===
 pybind11_add_module(pymcpolymer ${PROJECT_SOURCE_DIR}/src/pybind11_module.cpp)
-target_link_libraries(pymcpolymer PRIVATE MuVTPolymer)
+target_link_libraries(pymcpolymer PRIVATE MuVTPolymer Python3::Python)
 
 # === 关键修改 ===
 # MSVC 不需要链接 m 库，只有非 MSVC (如 Linux/MinGW) 才需要

@@ -45,8 +45,8 @@ public:
     void build_topology_map() override;
 
     bool check_collision_except_monomer( const double* r_try , int monomer_index); // Do not detect collision with monomer_index
-    bool insert_one_monomer(std::vector<std::array<double, 3>> &r_new, double *W, int monomer_index, int k_max); // Insert single monomer
-    void delete_one_monomer(std::vector<std::array<double, 3>> &r_delete, double *W, int monomer_index, int k_max); // Delete single monomer
+    bool insert_one_monomer(std::vector<std::array<double, 3>> &r_new, double *W, int monomer_index, int k_max) override; // Insert single monomer
+    void delete_one_monomer(std::vector<std::array<double, 3>> &r_delete, double *W, int monomer_index, int k_max) override ; // Delete single monomer
 
     double get_W_insert_ring(int k_max);
     double get_G_insert_ring(double insert_z, int k_max);

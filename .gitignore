@@ -80,3 +80,6 @@ Thumbs.db
 #markdown except for readme
 *.md
 !README.md
+
+# output file
+output/** 

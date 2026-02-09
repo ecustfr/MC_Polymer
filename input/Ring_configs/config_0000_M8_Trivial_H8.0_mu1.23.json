@@ -1,0 +1,30 @@
+{
+    "input_params": {
+        "polymer_type": "Ring",
+        "knot_type": "Trivial",
+        "configuration": "input/init_config_Z/TrivialN64M8H8.00rho0.10.dat",
+        "mu_b": 1.225130559,
+        "M": 8,
+        "init_N": 64,
+        "rho_b": 0.1,
+        "box_xy": 25.298221281347036,
+        "H": 8.0,
+        "rcut": 1.0,
+        "max_N": 640,
+        "external_potential": "None"
+    },
+    "simulation_params": {
+        "EPS_TRANS": 0.05,
+        "ROT_RATIO": 0.3,
+        "K_MAX": 10,
+        "sample_interval": 5,
+        "sample_time": 10000,
+        "sample_block": 4,
+        "dz": 0.05
+    },
+    "Vext_params": {},
+    "output_params": {
+        "output_dir": "output/OUT_config_0000_M8_Trivial_H8.0_mu1.23",
+        "output_prefix": "mc_sim_Trivial_H8.0_mub1.23_M8"
+    }
+}

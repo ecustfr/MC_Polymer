@@ -109,7 +109,7 @@ def run_single_task(config_path):
 
 def main():
     parser = argparse.ArgumentParser(description="Parallel Simulation Runner")
-    parser.add_argument('--input-dir', '-i', type=str, default=str(SCRIPT_DIR / 'input/Linear_configs'))
+    parser.add_argument('--input-dir', '-i', type=str, default=str(SCRIPT_DIR/ 'input/Ring_configs'))# input/Linear_configs
     parser.add_argument('--max-processes', '-m', type=int, default=3)
     args = parser.parse_args()
 
