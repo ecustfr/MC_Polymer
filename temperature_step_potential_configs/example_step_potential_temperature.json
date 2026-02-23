@@ -1,0 +1,41 @@
+{
+    "input_params": {
+        "polymer_type": "Linear",
+        "knot_type": "Trivial",
+        "configuration": "input/test_1.dat",
+        "mu_b": 0.5,
+        "M": 6,
+        "init_N": 64,
+        "rho_b": 0.1,
+        "box_xy": 17.8886,
+        "H": 6.0,
+        "rcut": 1.0,
+        "max_N": 1280,
+        "external_potential": "step"
+    },
+    "simulation_params": {
+        "EPS_TRANS": 0.05,
+        "ROT_RATIO": 0.3,
+        "K_MAX": 10,
+        "sample_interval": 8,
+        "sample_time": 20000,
+        "sample_block": 6,
+        "dz": 0.05,
+        "temperature_schedule": {
+            "beta_values": [0.5, 1.0, 2.0, 1.0],
+            "step_counts": [1000, 2000, 3000],
+            "schedule_type": "linear",
+            "schedule_param": 1.0
+        }
+    },
+    "Vext_params": {
+        "potential_type": "step",
+        "boundaries": [0.0, 2.0, 4.0, 6.0],
+        "potentials": [1.5, -0.8, 2.3],
+        "C": 0.5
+    },
+    "output_params": {
+        "output_dir": "output/OUT_config_0000_M6_Linear_H6.0_mu0.50",
+        "output_prefix": "mc_simulation"
+    }
+}

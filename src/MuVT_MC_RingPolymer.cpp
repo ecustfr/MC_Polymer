@@ -44,6 +44,10 @@ void MuVT_MC_RingPolymer::init_second()
     this->print_all_parameters();
 }
 
+// ======================================================================
+// 配置验证方法
+// ======================================================================
+
 bool MuVT_MC_RingPolymer::check_configure_validity()
 {
 
@@ -98,6 +102,10 @@ void MuVT_MC_RingPolymer::build_topology_map()
         // std::cout <<i<<":" <<this->topology_map[i][0] << " "<<this->topology_map[i][1] <<std::endl;
     }
 }
+
+// ======================================================================
+// 移动操作方法（环状聚合物特有）
+// ======================================================================
 
 void MuVT_MC_RingPolymer::rot_polymer_move(int polymer_index)
 {

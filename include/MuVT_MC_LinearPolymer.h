@@ -42,7 +42,11 @@ public:
     void reset_mc_record(); // 重置 mc 接受率等参数
     void mc_one_step_NVT(); // mc 中 NVT 步
     void mc_one_step_MuVT(); // mc 中 MuVT 步
-    
+
+    // 外势温度控制方法（只影响外势能项）
+    double get_current_external_beta() const;  // 获取当前外势beta值
+    void set_external_beta(double new_beta_ext);  // 直接设置外势beta值
+
     // 插入方法
     void old_insert_move(int k_max);
     virtual void insert_move(int k_max); // 新的插入方法，使用insert_one_monomer
@@ -80,14 +84,19 @@ public:
     // 体积缩放方法
     int get_change_volumn(int expan_or_shrink, double mc_cond_eps_volumn); // 体积缩放并检查重叠
     // 
-    virtual double get_W_insert(int k_max); // 计算化学势 
+    virtual double get_W_insert(int k_max); // 计算化学势
     virtual double get_G_insert(double insert_z, int first_insert_index, int k_max); // 计算插入权重
-    virtual bool insert_recursive(int next_idx, int parent_idx, int step, double &total_W, std::vector<std::array<double, 3>> &r_new, std::vector<int> &is_inserted, int k_max); // 递归插入单体 
+    virtual bool insert_recursive(int next_idx, int parent_idx, int step, double &total_W, std::vector<std::array<double, 3>> &r_new, std::vector<int> &is_inserted, int k_max); // 递归插入单体
     virtual double get_Wz_insert(double insert_z ,int first_insert_index, int k_max) ;
+    bool insert_recursive_no_external(int next_idx, int parent_idx, int step, double &total_W, std::vector<std::array<double, 3>> &r_new, std::vector<int> &is_inserted, int k_max); // 不考虑外势影响的递归插入方法
+    double get_Wz_insert_no_external(double insert_z, int first_insert_index, int k_max); // 不考虑外势影响的插入权重计算方法
     // Getter methods for Python interface
     int get_MN_now() const { return MN_now; }
     int get_N_now() const { return N_now; }
     double get_rho_now() const { return rho_now; }
+
+    // Energy monitoring method (external potential only)
+    double calculate_external_energy() const;  // 计算外部势能导致的粒子总能量
     int get_M() const { return M; }
     double get_H() const { return H; }
     double get_box_xy() const { return box_xy; }
@@ -99,6 +108,7 @@ public:
     double get_rot_acceptance() const;      // 获取旋转接受率
     double get_insert_acceptance() const;   // 获取插入接受率
     double get_delete_acceptance() const;   // 获取删除接受率
+    double get_reptation_acceptance() const; // 获取 reptation 接受率
     
     // 随机数设置
     void set_seed(unsigned int seed); // 设置随机数种子
@@ -151,18 +161,22 @@ protected:
     double rot_ratio; // 单链旋转中 旋转的比例
     int k_max;
 
+    // --- 外势温度参数 ---
+    double beta_ext;  // 外势能项的beta值 (1/(kT))
+
     double acc_trans;
     double acc_rot;
     double acc_regrow;
     double acc_insert;
     double acc_delete;
+    double acc_repta;
 
     int num_trans;
     int num_rot;
     int num_regrow;
     int num_insert;
     int num_delete;
-    int num_reptate;
+    int num_repta;
     
     // --- 随机数 ---
     unsigned int seed;
@@ -205,12 +219,18 @@ protected:
 
     static void Rot_temp(double *vec, double **r_temp_rot, int k_max);
 
-    
+    // --- 外势退火内部方法 ---
+    void update_external_temperature();  // 根据退火计划更新外势温度（内部使用）
+
+
 private:
+    // 只有线性聚合物能进行reptation
+    void reptation(int polymer_index,int direct,int k_max);
     // 对于线性聚合物不需要增添描述结构的数组
     MuVT_MC_LinearPolymer( const MuVT_MC_LinearPolymer &other ) = delete; // 禁用拷贝构造函数
     // 这行代码是什么意思？
     MuVT_MC_LinearPolymer& operator=( const MuVT_MC_LinearPolymer &other ) = delete; // 禁用赋值操作符
+
 };
 
 #endif

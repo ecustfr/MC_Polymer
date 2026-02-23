@@ -46,9 +46,15 @@ BASE_CONFIG = {
         "ROT_RATIO": 0.3, 
         "K_MAX": 10,
         "sample_interval": 8, 
-        "sample_time": 50000, 
-        "sample_block": 3, 
-        "dz": 0.01
+        "sample_time": 20000, 
+        "sample_block": 6, 
+        "dz": 0.05,
+        "temperature_schedule": 
+        {
+        "beta_values": [0.5, 1.0, 1.0,0.1, 1.0],
+        "step_counts": [1000, 2000,2000, 2000],
+        "schedule_type": "linear"
+        }
 
     },
     "Vext_params": {},

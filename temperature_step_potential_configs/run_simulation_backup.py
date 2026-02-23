@@ -14,7 +14,8 @@ from external_potential import (
     create_potential_function,
     calculate_custom_Vext,
     plot_potential,
-    create_potential_function_from_params
+    create_potential_function_from_params,
+    plot_step_potential
 )
 
 # Add current directory to Python path for importing pymcpolymer module
@@ -112,15 +113,53 @@ def run_simulation(config):
         simulation_params['K_MAX']
     )
 
-    # 默认行为：外势beta=1.0
-    mc_sys.set_external_beta(1.0)
-    print("Using default beta_ext=1.0")
+    # 温度调度设置（新系统，优先使用）
+    if 'temperature_schedule' in simulation_params:
+        temp_schedule = simulation_params['temperature_schedule']
+
+        beta_values = temp_schedule.get('beta_values', [1.0])
+        step_counts = temp_schedule.get('step_counts', [0])
+        schedule_type = temp_schedule.get('schedule_type', 'linear')
+        schedule_param = temp_schedule.get('schedule_param', 1.0)
+
+        # 计算总步数和各段起始步数
+        total_schedule_steps = sum(step_counts)
+        segment_starts = [0]
+        for i in range(len(step_counts)):
+            segment_starts.append(segment_starts[-1] + step_counts[i])
+
+        # 保存温度调度参数供后续使用
+        simulation_params['_temperature_schedule'] = {
+            'beta_values': beta_values,
+            'step_counts': step_counts,
+            'segment_starts': segment_starts,
+            'total_steps': total_schedule_steps,
+            'schedule_type': schedule_type,
+            'schedule_param': schedule_param,
+            'using_new_system': True
+        }
+
+        print(f"Temperature schedule activated:")
+        print(f"  Beta values: {beta_values}")
+        print(f"  Step counts: {step_counts}")
+        print(f"  Total schedule steps: {total_schedule_steps}")
+        print(f"  Schedule type: {schedule_type}")
+
+        # 初始温度设为第一个beta值
+        initial_beta = beta_values[0]
+        mc_sys.set_external_beta(initial_beta)
+        print(f"  Initial beta set to: {initial_beta}")
+
+    else:
+        # 默认行为：外势beta=1.0，不退火
+        mc_sys.set_external_beta(1.0)
+        print("No temperature schedule provided, using default beta_ext=1.0")
 
     # Set external potential if specified
     external_potential = input_params['external_potential']
     print(f"External potential type: {external_potential}")
-
-    if external_potential == 'custom':
+    
+    if external_potential == 'custom' or external_potential == 'step':
         Vext_params = config['Vext_params']
         box_size_z = input_params['H']  # Use H as box size in z-direction
 
@@ -155,13 +194,20 @@ def run_simulation(config):
 
         # Generate plot of the potential
         plot_file = os.path.join(output_dir, f'{external_potential}_potential_plot.png')
-        # Custom potential plot
-        An = Vext_params['An']
-        phi_n = Vext_params['phi_n']
-        Vlin_par = Vext_params['Vlin_par']
-        x_tar = Vext_params['x_tar']
-        C = Vext_params.get('C', 1.0)
-        plot_potential(An, phi_n, box_size_z, Vlin_par, x_tar, C=C, output_file=plot_file)
+        if external_potential == 'custom':
+            # Custom potential plot
+            An = Vext_params['An']
+            phi_n = Vext_params['phi_n']
+            Vlin_par = Vext_params['Vlin_par']
+            x_tar = Vext_params['x_tar']
+            C = Vext_params.get('C', 1.0)
+            plot_potential(An, phi_n, box_size_z, Vlin_par, x_tar, C=C, output_file=plot_file)
+        elif external_potential == 'step':
+            # Step potential plot
+            boundaries = Vext_params['boundaries']
+            potentials = Vext_params['potentials']
+            C = Vext_params.get('C', 1.0)
+            plot_step_potential(boundaries, potentials, box_size_z, C=C, output_file=plot_file)
         print(f"{external_potential.capitalize()} potential plot saved to: {plot_file}")
     elif external_potential == 'None':
         mc_sys.set_external_potential("hs_wall")
@@ -201,7 +247,7 @@ def run_simulation(config):
     Wz_fix_z_analyzers = [GlobalPropertyAnalyzer(name=f"wz_fix_z_{i}") for i in range(num_wz_points)]
 
     # Energy trajectory file
-    # energy_trace_file = f"{output_params['output_dir']}/{output_params['output_prefix']}_energy_trace.dat"
+    energy_trace_file = f"{output_params['output_dir']}/{output_params['output_prefix']}_energy_trace.dat"
 
     # Wz_insert = DistributionAnalyzer(name = "Wz_profile", dz=dz , bins=n_bins)
     # Initialize W_insert accumulation variables
@@ -212,9 +258,9 @@ def run_simulation(config):
     # trace_recorder = TraceRecorder(trace_file)
 
     # Open energy trace file
-    #energy_trace_file = f"{output_params['output_dir']}/{output_params['output_prefix']}_energy_trace.dat"
-    #energy_trace_fp = open(energy_trace_file, 'w')
-    #energy_trace_fp.write("# Step Block External_Energy\n")  # Header
+    energy_trace_file = f"{output_params['output_dir']}/{output_params['output_prefix']}_energy_trace.dat"
+    energy_trace_fp = open(energy_trace_file, 'w')
+    energy_trace_fp.write("# Step Block External_Energy\n")  # Header
     
 
 
@@ -245,6 +291,44 @@ def run_simulation(config):
             mc_sys.mc_one_step_NVT()
             mc_sys.mc_one_step_MuVT()
 
+            # 更新外势温度
+            total_step = block * simulation_params['sample_time'] + step
+
+            if '_temperature_schedule' in simulation_params:
+                temp_schedule = simulation_params['_temperature_schedule']
+                beta_values = temp_schedule['beta_values']
+                segment_starts = temp_schedule['segment_starts']
+                total_schedule_steps = temp_schedule['total_steps']
+                schedule_type = temp_schedule['schedule_type']
+                schedule_param = temp_schedule['schedule_param']
+
+                if total_step < total_schedule_steps:
+                    segment_index = 0
+                    for i in range(len(segment_starts) - 1):
+                        if total_step >= segment_starts[i] and total_step < segment_starts[i + 1]:
+                            segment_index = i
+                            break
+
+                    segment_start = segment_starts[segment_index]
+                    segment_end = segment_starts[segment_index + 1]
+                    segment_steps = segment_end - segment_start
+                    segment_progress = (total_step - segment_start) / segment_steps if segment_steps > 0 else 0.0
+
+                    start_beta = beta_values[segment_index]
+                    end_beta = beta_values[segment_index + 1]
+
+                    if schedule_type == 'linear':
+                        current_beta = start_beta + (end_beta - start_beta) * segment_progress
+                    elif schedule_type == 'exponential':
+                        decay = np.exp(-schedule_param * segment_progress)
+                        current_beta = end_beta + (start_beta - end_beta) * decay
+                    else:
+                        current_beta = start_beta + (end_beta - start_beta) * segment_progress
+
+                    mc_sys.set_external_beta(current_beta)
+                else:
+                    final_beta = beta_values[-1]
+                    mc_sys.set_external_beta(final_beta)
 
             #mc_sys.insert_move_recursive_ring(simulation_params['K_MAX'])
             #mc_sys.insert_move(simulation_params['K_MAX'])
@@ -262,9 +346,9 @@ def run_simulation(config):
                 #rho_profile.accumulate(mc_sys,cal_density_profile)
 
                 # Record external potential energy to trace file
-                # current_energy = mc_sys.calculate_external_energy()
-                # total_step = block * simulation_params['sample_time'] + step
-                # energy_trace_fp.write(f"{total_step} {block} {current_energy:.6f}\n")
+                current_energy = mc_sys.calculate_external_energy()
+                total_step = block * simulation_params['sample_time'] + step
+                energy_trace_fp.write(f"{total_step} {block} {current_energy:.6f}\n")
                 
                 """
                 Wz_insert.accumulate(
@@ -289,6 +373,10 @@ def run_simulation(config):
         # End block
         mc_sys.end_block(block)
         
+        
+        
+        
+
         # Get average results for current block
         # block_avg_rg_values = polymer_analyzer.get_average_values()
         block_avg_density_profile = rho_profile.average
@@ -327,9 +415,17 @@ def run_simulation(config):
         rot_acceptance = mc_sys.get_rot_acceptance()
         insert_acceptance = mc_sys.get_insert_acceptance()
         delete_acceptance = mc_sys.get_delete_acceptance()
-        # reptation_acceptance = mc_sys.get_reptation_acceptance()
+        reptation_acceptance = mc_sys.get_reptation_acceptance()
         # Get current external beta value
-        # current_beta_ext = mc_sys.get_current_external_beta()
+        current_beta_ext = mc_sys.get_current_external_beta()
+
+        # 确定是否在温度调度阶段
+        is_annealing_active = False
+        if '_temperature_schedule' in simulation_params:
+            temp_schedule = simulation_params['_temperature_schedule']
+            total_schedule_steps = temp_schedule['total_steps']
+            total_step = (block + 1) * simulation_params['sample_time'] - 1  # block结束时的步数
+            is_annealing_active = total_step < total_schedule_steps
 
         with open(f"{output_params['output_dir']}/block_{block}_ensemble_data.dat", 'w') as f:
             # f.write(f"average_rg {block_overall_avg_rg:.6f}\n")
@@ -340,10 +436,11 @@ def run_simulation(config):
                 f.write(f"mu_z_{i} z={z_pos:.3f} value={mu_z:.6f}\n")
             f.write(f"eps_trans {current_eps_trans:.6f}\n")
             f.write(f"K_MAX {current_k_max}\n")
-            # f.write(f"current_beta_ext {current_beta_ext:.6f}\n")
+            f.write(f"current_beta_ext {current_beta_ext:.6f}\n")
+            f.write(f"is_annealing_active {is_annealing_active}\n")
             f.write(f" Block {block} trans acceptance: {trans_acceptance:.4f}, rot acceptance: {rot_acceptance:.4f}\n")
             f.write(f" Block {block} insert acceptance: {insert_acceptance:.4f}, delete acceptance: {delete_acceptance:.4f}\n")
-            # f.write(f" Block {block} reptation acceptance: {reptation_acceptance:.4f}\n")
+            f.write(f" Block {block} reptation acceptance: {reptation_acceptance:.4f}\n")
         
         
 
@@ -384,7 +481,7 @@ def run_simulation(config):
     # trace_recorder.close()
 
     # Close energy trace file
-    #energy_trace_fp.close()
+    energy_trace_fp.close()
     
     
     # Save simulation configuration to file

@@ -325,6 +325,11 @@ def cal_Wz_profile(sim:Any,dz:float,n_bins:int,monomer_index:int, k_max = 10 , i
 
     return profile
 
+
+def cal_wz_fix_z(sim:Any, z:float, monomer_index:int, k_max = 10):
+    
+    return sim.get_Wz_insert(z,monomer_index,k_max)
+
 def cal_W(sim:Any,k_max:int):
     return sim.get_W_insert(k_max)
 

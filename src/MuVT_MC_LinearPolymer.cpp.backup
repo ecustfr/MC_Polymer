@@ -67,7 +67,7 @@ MuVT_MC_LinearPolymer::~MuVT_MC_LinearPolymer()
     {
         delete[] this->r_total[i];
         delete[] this->r_init[i];
-
+        
     }
     delete[] this->r_total;
     delete[] this->r_init;
@@ -77,10 +77,6 @@ MuVT_MC_LinearPolymer::~MuVT_MC_LinearPolymer()
     }
     delete[] this->r_insert_temp;
 }
-
-// ======================================================================
-// 初始化方法
-// ======================================================================
 
 
 void MuVT_MC_LinearPolymer::easy_cal_init_parameters()
@@ -156,10 +152,6 @@ void MuVT_MC_LinearPolymer::init_second() //
     this->print_all_parameters();
 }
 
-// ======================================================================
-// 参数设置和获取方法
-// ======================================================================
-
 void MuVT_MC_LinearPolymer::build_memory_r()
 {
     this->r_total = new double *[this->max_N * this->M];
@@ -204,10 +196,6 @@ void MuVT_MC_LinearPolymer::print_all_parameters()
     std::cout << "-----------------------------------------------------------" << std::endl;
 
 }
-
-// ======================================================================
-// 外势相关方法
-// ======================================================================
 
 // 实现 Vext_pot 方法
 double MuVT_MC_LinearPolymer::Vext_pot(double z) const
@@ -363,9 +351,6 @@ void MuVT_MC_LinearPolymer::set_external_potential(const std::string& name)
     std::cout << "External potential set to: " << name << std::endl;
 }
 
-// ======================================================================
-// 模拟控制方法
-// ======================================================================
 
 // 生成最后一个单体位置（用于环状聚合物闭合）
 // 对于线性聚合物，此方法不适用，返回 false
@@ -373,10 +358,6 @@ bool MuVT_MC_LinearPolymer::generate_last_monomer_position(const std::vector<std
 {
     return false;
 }
-
-// ======================================================================
-// 模拟控制方法
-// ======================================================================
 
 void MuVT_MC_LinearPolymer::end_block(int block)
 {
@@ -441,10 +422,6 @@ double MuVT_MC_LinearPolymer::get_reptation_acceptance() const
     return static_cast<double>(this->acc_repta) / this->num_repta;
 }
 
-// ======================================================================
-// 移动操作方法
-// ======================================================================
-
 void MuVT_MC_LinearPolymer::reset_mc_record()
 {
     this->acc_trans = 0 ;
@@ -479,9 +456,7 @@ void MuVT_MC_LinearPolymer::set_seed(unsigned int seed)
     std::cout << "Random number generator seed set to: " << seed << std::endl;
 }
 
-// ======================================================================
-// 辅助计算方法
-// ======================================================================
+// 删除单个单体的方法
 
 void MuVT_MC_LinearPolymer::Find_Last(double *r1, double *r2, double **r_temp_rot, int k_max)
 {
@@ -586,10 +561,6 @@ void MuVT_MC_LinearPolymer::Rot_temp(double *vec, double **r_temp_rot, int k_max
         r_temp_rot[i][2] = R20 * temp[0] + R21 * temp[1] + R22 * temp[2];
     }
 }
-
-// ======================================================================
-// 移动操作方法（旋转和平移）
-// ======================================================================
 
 void MuVT_MC_LinearPolymer::rot_polymer_move(int polymer_index)
 {
@@ -822,10 +793,6 @@ void MuVT_MC_LinearPolymer::rot_mid_move(int monomer_index ,int polymer_index)
     
     // std::cout << "rot_mid_move end" << std::endl;
 }
-
-// ======================================================================
-// 移动操作方法（插入和删除）
-// ======================================================================
 
 void MuVT_MC_LinearPolymer::old_insert_move(int k_max)
 {
@@ -1719,10 +1686,6 @@ bool MuVT_MC_LinearPolymer::check_configure_validity()
     return true;
 }
 
-// ======================================================================
-// 格子列表方法
-// ======================================================================
-
 int MuVT_MC_LinearPolymer::get_cell_index(const double* r)
 {
 
@@ -1959,10 +1922,6 @@ bool MuVT_MC_LinearPolymer::check_collision_except_monomer(const double* r_try, 
     return false;// 安全，无碰撞
 }
 
-// ======================================================================
-// 主模拟循环方法
-// ======================================================================
-
 void MuVT_MC_LinearPolymer::mc_one_step_NVT()
 {
     int now_N = this->N_now;
@@ -2119,9 +2078,6 @@ int MuVT_MC_LinearPolymer::get_change_volumn(int expan_or_shrink, double mc_cond
     return 0; // 没有重叠
 }
 
-// ======================================================================
-// 化学势计算方法
-// ======================================================================
 
 double MuVT_MC_LinearPolymer::get_W_insert(int k_max) 
 {
@@ -2350,9 +2306,7 @@ bool MuVT_MC_LinearPolymer::insert_recursive_no_external(
     return insert_recursive_no_external(next_idx + step, next_idx, step, total_W, r_new, is_inserted, k_max);
 }
 
-// ======================================================================
-// 移动操作方法（reptation）
-// ======================================================================
+
 
 void MuVT_MC_LinearPolymer::reptation(int polymer_index , int direct,int k_max)
 {

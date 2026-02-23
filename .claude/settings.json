@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(T:anacondaScriptsactivate.bat mcpolymer)"
+    ]
+  }
+}

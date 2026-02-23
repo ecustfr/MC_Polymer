@@ -66,6 +66,7 @@ PYBIND11_MODULE(pymcpolymer, m) {
         .def("get_rot_acceptance", &MuVT_MC_LinearPolymer::get_rot_acceptance)
         .def("get_insert_acceptance", &MuVT_MC_LinearPolymer::get_insert_acceptance)
         .def("get_delete_acceptance", &MuVT_MC_LinearPolymer::get_delete_acceptance)
+        .def("get_reptation_acceptance", &MuVT_MC_LinearPolymer::get_reptation_acceptance)
         // Expose r_total as numpy array
         .def_property_readonly("r_total", [](const MuVT_MC_LinearPolymer &self) {
             int rows = self.get_MN_now();
@@ -136,7 +137,16 @@ PYBIND11_MODULE(pymcpolymer, m) {
              "Calculate external potential at position z")
         .def("Vext_bz", &MuVT_MC_LinearPolymer::Vext_bz,
              py::arg("pos"),
-             "Calculate Boltzmann factor for external potential");
+             "Calculate Boltzmann factor for external potential")
+        // 外势温度控制方法绑定
+        .def("get_current_external_beta", &MuVT_MC_LinearPolymer::get_current_external_beta,
+             "Get current external potential beta value")
+        .def("set_external_beta", &MuVT_MC_LinearPolymer::set_external_beta,
+             py::arg("new_beta_ext"),
+             "Directly set external potential beta value")
+        // 能量监测方法绑定
+        .def("calculate_external_energy", &MuVT_MC_LinearPolymer::calculate_external_energy,
+             "Calculate total external potential energy of all particles");
 
     // Bind MuVT_MC_RingPolymer class (inherits from MuVT_MC_LinearPolymer)
     py::class_<MuVT_MC_RingPolymer, MuVT_MC_LinearPolymer>(m, "MuVT_MC_RingPolymer")
