@@ -8,13 +8,15 @@
 #include <random>
 #include <chrono>
 
-
+constexpr double diameter = 1.0;
+constexpr double diameter2 = 1.0;
 
 class Bulk_RingPolymer {
 public:
     // 构造函数和析构函数
-    Bulk_RingPolymer(std::string configuration, int M, int init_N, 
-                    double rho, double box_size[3], double rcut, int max_N);
+    Bulk_RingPolymer(std::string configuration, int M, int init_N,
+                    double rho, double box_size[3], double rcut, int max_N,
+                    double mu_b = 0.0, double rho_b = 0.0);
     ~Bulk_RingPolymer();
     
     // 初始化和设置
@@ -41,6 +43,24 @@ public:
     
     // 插入高分子并计算插入权重
     double calculate_insertion_weight(int k_max);
+
+    // 巨正则模拟方法
+    void mc_one_step_MuVT();                    // 巨正则单步模拟
+    void run_simulation_MuVT(int steps);        // 巨正则多步模拟
+
+    // 插入/删除移动
+    void insert_move(int k_max);
+    void delete_move(int k_max, int delete_polymer_index);
+
+    // 单体操作方法
+    bool insert_one_monomer(std::vector<std::array<double, 3>> &r_new,
+                           double *Z_eff, int monomer_index, int k_max);
+    void delete_one_monomer(std::vector<std::array<double, 3>> &r_delete,
+                           double *Z_eff, int monomer_index, int k_max);
+
+    // 统计获取方法
+    double get_insert_acceptance() const;
+    double get_delete_acceptance() const;
     
 private:
     // 系统状态
@@ -52,10 +72,14 @@ private:
     const int M; // 每个聚合物的单体数
     const double rho; // 目标密度
     double box_size[3]; // 体相盒子大小 (三个方向都有周期性边界)
+    double V; // 系统体积
     double rcut; // 截断半径
     double real_rcut[3]; // 实际截断半径
     int cell_num[3]; // 格子数
     const int max_N; // 最大聚合物数
+    const double mu_b; // 化学势
+    const double exp_mu_b; // exp(βμ)
+    const double rho_b; // 体相参考密度
     
     // 核心数据
     double** r_total; // 所有单体位置
@@ -78,8 +102,12 @@ private:
     // 接受率统计
     double acc_trans; // 平移接受数
     double acc_rot; // 旋转接受数
+    double acc_insert; // 插入接受数
+    double acc_delete; // 删除接受数
     int num_trans; // 平移尝试次数
     int num_rot; // 旋转尝试次数
+    int num_insert; // 插入尝试次数
+    int num_delete; // 删除尝试次数
     
     // 随机数生成
     unsigned int seed;
@@ -102,6 +130,7 @@ private:
     
     // 距离计算函数
     double dis2_no_period(const double* r1, const double* r2) const; // 非周期性距离平方
+    double dis2_period(const double* r1, const double* r2) const; // 三维周期性距离平方
     
     // 碰撞检测
     bool check_configure_validity();

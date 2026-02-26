@@ -6,6 +6,7 @@ This module provides functions for calculating and generating external potential
 for polymer simulations. All potential calculations use the [0, H] range for z-coordinates.
 """
 
+import os
 import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
@@ -167,8 +168,7 @@ def generate_vext_params(H, potential_type="custom", n_steps=3, seed=None, **kwa
             "An": rng.normal(0, np.sqrt(2.5), 4).tolist(),
             "phi_n": (2 * np.pi * rng.random(4)).tolist(),
             "Vlin_par": rng.normal(0, 2, (2, 4)).tolist(),
-            "x_tar": x_tar.tolist(),
-            "C": 0.4
+            "x_tar": x_tar.tolist()
         }
     else:
         raise ValueError(f"Unknown potential type: {potential_type}")
@@ -351,7 +351,6 @@ def generate_step_vext_params(H, n_steps=3, seed=None, potential_mean=0.0, poten
     dict
         Dictionary of step potential parameters
     """
-    import numpy as np
     rng = np.random.default_rng(seed)
 
     # Generate random boundaries (excluding 0 and H)
@@ -398,10 +397,6 @@ def plot_step_potential(boundaries, potentials, box_size_z, C=1.0, output_file=N
     --------
     None
     """
-    import numpy as np
-    import matplotlib.pyplot as plt
-    from pathlib import Path
-
     # Validate parameters
     if len(boundaries) < 2:
         raise ValueError("boundaries must have at least 2 elements")
@@ -469,3 +464,166 @@ def plot_step_potential(boundaries, potentials, box_size_z, C=1.0, output_file=N
 
     # Show plot
     plt.show()
+
+
+def _create_and_set_potential(Vext_params, box_size_z, mc_sys, external_potential):
+    """
+    Create potential function from parameters and set it to the MC system.
+
+    Parameters:
+    -----------
+    Vext_params : dict
+        Potential parameters dictionary
+    box_size_z : float
+        Box size in z-direction
+    mc_sys : object
+        Monte Carlo simulation system object
+    external_potential : str
+        External potential type ('custom')
+
+    Returns:
+    --------
+    function
+        Created potential function
+    """
+    # Create potential function using the unified factory function
+    potential_func = create_potential_function_from_params(Vext_params, box_size_z)
+
+    # Set external potential
+    mc_sys.set_external_potential(potential_func, f'{external_potential}_potential')
+    print(f"{external_potential.capitalize()} external potential set successfully")
+
+    return potential_func
+
+
+def _save_potential_values_to_file(potential_func, box_size_z, output_dir, external_potential, Vext_params):
+    """
+    Calculate potential values and save them to a file.
+
+    Parameters:
+    -----------
+    potential_func : function
+        Potential function that takes z as input
+    box_size_z : float
+        Box size in z-direction
+    output_dir : str
+        Output directory for saving the file
+    external_potential : str
+        External potential type ('custom')
+    Vext_params : dict
+        Potential parameters dictionary for the file header
+
+    Returns:
+    --------
+    None
+    """
+    dz = 0.05
+    z_values = np.arange(0, box_size_z + dz/2, dz)
+    potential_values = []
+    for z in z_values:
+        V = potential_func(z)
+        potential_values.append(V)
+
+    # Save to output directory
+    output_file = os.path.join(output_dir, f'{external_potential}_potential_values.txt')
+    with open(output_file, 'w', encoding='utf-8') as f:
+        f.write(f"# {external_potential.capitalize()} External Potential Values\n")
+        f.write(f"# Box size H = {box_size_z}\n")
+        f.write(f"# Potential type: {external_potential}\n")
+        f.write(f"# Parameters: {Vext_params}\n")
+        f.write("# z\tpotential\n")
+        for z, V in zip(z_values, potential_values):
+            f.write(f"{z:.6f}\t{V:.6f}\n")
+
+    print(f"{external_potential.capitalize()} potential values saved to: {output_file}")
+    print(f"Number of points: {len(z_values)}, dz={dz}")
+
+
+def _generate_potential_plot_file(Vext_params, box_size_z, output_dir, external_potential):
+    """
+    Generate and save a plot of the potential.
+
+    Parameters:
+    -----------
+    Vext_params : dict
+        Potential parameters dictionary
+    box_size_z : float
+        Box size in z-direction
+    output_dir : str
+        Output directory for saving the plot
+    external_potential : str
+        External potential type ('custom')
+
+    Returns:
+    --------
+    None
+    """
+    plot_file = os.path.join(output_dir, f'{external_potential}_potential_plot.png')
+    potential_type = Vext_params.get('potential_type', 'custom')
+
+    if potential_type == 'custom':
+        # Custom potential plot
+        An = Vext_params['An']
+        phi_n = Vext_params['phi_n']
+        Vlin_par = Vext_params['Vlin_par']
+        x_tar = Vext_params['x_tar']
+        C = Vext_params.get('C', 1.0)
+        plot_potential(An, phi_n, box_size_z, Vlin_par, x_tar, C=C, output_file=plot_file)
+    elif potential_type == 'step':
+        # Step potential plot
+        boundaries = Vext_params['boundaries']
+        potentials = Vext_params['potentials']
+        C = Vext_params.get('C', 1.0)
+        plot_step_potential(boundaries, potentials, box_size_z, C=C, output_file=plot_file)
+    else:
+        raise ValueError(f"Unknown potential type in Vext_params: {potential_type}")
+
+    print(f"{external_potential.capitalize()} potential plot saved to: {plot_file}")
+
+
+def setup_external_potential(mc_sys, input_params, config, output_dir):
+    """
+    Set up external potential for simulation based on configuration.
+
+    Parameters:
+    -----------
+    mc_sys : object
+        Monte Carlo simulation system object (MuVT_MC_RingPolymer or MuVT_MC_LinearPolymer)
+    input_params : dict
+        Input parameters dictionary containing 'external_potential' and 'H'
+    config : dict
+        Full configuration dictionary containing Vext_params if external_potential is 'custom'
+    output_dir : str
+        Output directory for saving potential values and plots
+
+    Returns:
+    --------
+    None
+
+    Notes:
+    ------
+    - Supports 'custom' and 'None' external_potential types from input_params
+    - For 'custom' type, Vext_params must contain 'potential_type' ('custom' or 'step')
+    - For 'custom' potential_type: requires An, phi_n, Vlin_par, x_tar parameters
+    - For 'step' potential_type: requires boundaries and potentials parameters
+    """
+    # Set external potential if specified
+    external_potential = input_params['external_potential']
+    print(f"External potential type: {external_potential}")
+
+    if external_potential == 'custom':
+        Vext_params = config['Vext_params']
+        box_size_z = input_params['H']  # Use H as box size in z-direction
+
+        # Create and set the potential function, then save values to file
+        _save_potential_values_to_file(
+            _create_and_set_potential(Vext_params, box_size_z, mc_sys, external_potential),
+            box_size_z, output_dir, external_potential, Vext_params
+        )
+
+        # Generate and save potential plot
+        _generate_potential_plot_file(Vext_params, box_size_z, output_dir, external_potential)
+
+    elif external_potential == 'None':
+        mc_sys.set_external_potential("hs_wall")
+        print("No external potential will be used")

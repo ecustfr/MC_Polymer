@@ -1,20 +1,26 @@
 #include "Bulk_RingPolymer.h"
+#include "Utils.h"
 #include <iostream>
 #include <fstream>
 #include <sstream>
 #include <algorithm>
 #include <stdexcept>
+#include <array>
+#include <vector>
 
-Bulk_RingPolymer::Bulk_RingPolymer(std::string configuration, int M, int init_N, 
-                                double rho, double box_size[3], double rcut, int max_N)
-    : M(M), rho(rho), max_N(max_N)
+Bulk_RingPolymer::Bulk_RingPolymer(std::string configuration, int M, int init_N,
+                                double rho, double box_size[3], double rcut, int max_N,
+                                double mu_b, double rho_b)
+    : M(M), rho(rho), max_N(max_N), mu_b(mu_b), rho_b(rho_b),
+      exp_mu_b(std::exp(mu_b))
 {
     // 复制盒子大小
     for (int dim = 0; dim < 3; dim++) {
         this->box_size[dim] = box_size[dim];
     }
     this->rcut = rcut;
-    
+    this->V = this->box_size[0] * this->box_size[1] * this->box_size[2];
+
     // 初始化成员变量
     this->easy_cal_init_parameters();
     this->build_memory_r();
@@ -129,6 +135,14 @@ double Bulk_RingPolymer::dis2_no_period(const double* r1, const double* r2) cons
     return dx * dx + dy * dy + dz * dz;
 }
 
+// 计算两点之间的三维周期性距离平方
+double Bulk_RingPolymer::dis2_period(const double* r1, const double* r2) const {
+    double dx = this->dis_period(r1[0], r2[0], this->box_size[0]);
+    double dy = this->dis_period(r1[1], r2[1], this->box_size[1]);
+    double dz = this->dis_period(r1[2], r2[2], this->box_size[2]);
+    return dx*dx + dy*dy + dz*dz;
+}
+
 // 格子列表相关方法
 int Bulk_RingPolymer::get_cell_index(const double* pos) {
     int ix_raw = static_cast<int>(floor(pos[0] / this->real_rcut[0]));
@@ -225,8 +239,12 @@ void Bulk_RingPolymer::print_all_parameters() {
 void Bulk_RingPolymer::reset_mc_record() {
     this->acc_trans = 0;
     this->acc_rot = 0;
+    this->acc_insert = 0;
+    this->acc_delete = 0;
     this->num_trans = 0;
     this->num_rot = 0;
+    this->num_insert = 0;
+    this->num_delete = 0;
 }
 
 // 结束一个block
@@ -235,6 +253,16 @@ void Bulk_RingPolymer::end_block(int block) {
     std::cout << "Translation acceptance ratio: " << static_cast<double>(this->acc_trans) / this->num_trans << std::endl;
     std::cout << "Rotation acceptance ratio: " << static_cast<double>(this->acc_rot) / this->num_rot << std::endl;
     this->reset_mc_record();
+}
+
+// 获取插入接受率
+double Bulk_RingPolymer::get_insert_acceptance() const {
+    return (this->num_insert > 0) ? static_cast<double>(this->acc_insert) / this->num_insert : 0.0;
+}
+
+// 获取删除接受率
+double Bulk_RingPolymer::get_delete_acceptance() const {
+    return (this->num_delete > 0) ? static_cast<double>(this->acc_delete) / this->num_delete : 0.0;
 }
 
 // 碰撞检测方法
@@ -853,6 +881,400 @@ double Bulk_RingPolymer::calculate_insertion_weight(int k_max) {
     // 对于体相系统，插入权重等于第一个粒子的总权重除以k_max
     // 因为每个候选位置的概率相等，都是1/k_max
     double insertion_weight = sum_weights / k_max;
-    
+
     return insertion_weight;
+}
+
+// ======================================================================
+// 巨正则系综模拟方法
+// ======================================================================
+
+// 巨正则单步模拟
+void Bulk_RingPolymer::mc_one_step_MuVT() {
+    this->insert_move(this->k_max);
+    int delete_N = static_cast<int>(this->N_now * this->uni_dis(this->gen));
+    this->delete_move(this->k_max, delete_N);
+}
+
+// 巨正则多步模拟
+void Bulk_RingPolymer::run_simulation_MuVT(int steps) {
+    std::cout << "Running MuVT simulation for " << steps << " steps..." << std::endl;
+    for (int step = 0; step < steps; step++) {
+        this->mc_one_step_MuVT();
+
+        // 每1000步打印一次状态
+        if (step % 1000 == 0) {
+            std::cout << "Step " << step << ", N_now = " << this->N_now << ", MN_now = " << this->MN_now << std::endl;
+        }
+    }
+    std::cout << "MuVT simulation completed." << std::endl;
+}
+
+// ======================================================================
+// 插入移动方法
+// ======================================================================
+
+void Bulk_RingPolymer::insert_move(int k_max)
+{
+    this->num_insert++;
+
+    // 1. 初始化新聚合物的位置
+    std::vector<std::array<double, 3>> r_new(this->M);
+    double Z_eff = 1.0;
+
+    // 2. 插入每个单体
+    for (int monomer_index = 0; monomer_index < this->M; monomer_index++)
+    {
+        if (!this->insert_one_monomer(r_new, &Z_eff, monomer_index, k_max))
+        {
+            return; // 单体插入失败
+        }
+    }
+
+    // 3. 计算接受概率
+    double acc_ratio = this->exp_mu_b * Z_eff / (this->N_now + 1) * (this->V);
+
+    // 4. 接受或拒绝
+    if (acc_ratio > this->uni_dis(this->gen))
+    {
+        this->acc_insert++;
+        // 更新系统状态
+        for (int monomer_index = 0; monomer_index < this->M; monomer_index++)
+        {
+            for (int j = 0; j < 3; j++)
+            {
+                this->r_total[this->MN_now + monomer_index][j] = r_new[monomer_index][j];
+            }
+        }
+        this->MN_now += this->M;
+        this->N_now++;
+
+        // 更新cell列表
+        if (this->MN_now > this->cl_threshold)
+        {
+            this->build_cell_list();
+        }
+    }
+
+    return;
+}
+
+// ======================================================================
+// 删除移动方法
+// ======================================================================
+
+void Bulk_RingPolymer::delete_move(int k_max, int delete_polymer_index)
+{
+    this->num_delete++;
+
+    int delete_first_monomer_index = delete_polymer_index * this->M;
+    int last_polymer_start = this->MN_now - this->M;
+
+    // 2. 交换指针，把要删除的聚合物链放到最后面
+    for (int monomer_index = 0; monomer_index < this->M; monomer_index++)
+    {
+        std::swap(this->r_total[delete_first_monomer_index + monomer_index], this->r_total[last_polymer_start + monomer_index]);
+    }
+
+    // 3. 保存要删除的聚合物的位置
+    std::vector<std::array<double, 3>> r_delete(this->M);
+    for (int i = 0; i < this->M; i++)
+    {
+        for (int j = 0; j < 3; ++j)
+        {
+            r_delete[i][j] = this->r_total[last_polymer_start + i][j];
+        }
+    }
+    int original_MN_now = this->MN_now;
+    this->MN_now -= this->M;
+    this->N_now -= 1;
+    // 4. 更新cell列表，因为粒子位置已经改变
+    if (this->MN_now > this->cl_threshold)
+    {
+        this->build_cell_list();
+    }
+
+    // 5. 先假设聚合物被删除
+
+    // 6. 使用delete_one_monomer方法计算每个单体的权重
+    double Z_eff = 1.0;
+    for (int monomer_index = 0; monomer_index < this->M; monomer_index++)
+    {
+        this->delete_one_monomer(r_delete, &Z_eff, monomer_index, k_max);
+    }
+
+    // 7. 计算接受概率
+    double acc_ratio = 1.0 / (Z_eff * this->exp_mu_b) * (this->N_now + 1) / this->V;
+    // 8. 决定是否接受删除
+    if (acc_ratio > this->uni_dis(this->gen))
+    {
+        this->acc_delete++;
+    }
+    else
+    {
+        this->MN_now += M;
+        this->N_now += 1;
+        if (this->MN_now > this->cl_threshold)
+        {
+            this->build_cell_list();
+        }
+    }
+}
+
+// ======================================================================
+// 单体操作方法
+// ======================================================================
+
+bool Bulk_RingPolymer::insert_one_monomer(std::vector<std::array<double, 3>> &r_new, double *Z_eff, int monomer_index, int k_max)
+{
+    // monomer_index 正在生长的位置
+    // 生成k_max个候选位置
+    std::vector<std::array<double, 3>> candidate_positions(k_max);
+    std::vector<double> z_weights(k_max, 1.0);
+
+    std::vector<double> P_road(k_max, 1.0);
+    int grow_step = this->M - monomer_index;
+
+    if (monomer_index == 0)
+    {
+        for (int k = 0; k < k_max; k++)
+        {
+            candidate_positions[k][0] = this->box_size[0] * this->uni_dis(this->gen);
+            candidate_positions[k][1] = this->box_size[1] * this->uni_dis(this->gen);
+            candidate_positions[k][2] = this->box_size[2] * this->uni_dis(this->gen);
+
+            // 检查与其他单体的重叠
+            if (this->overlap_all_other_polymer(candidate_positions[k].data()))
+            {
+                z_weights[k] = 0.0;
+            }
+            else
+            {
+                // 体相系统无外势，权重为1
+                z_weights[k] = 1.0;
+            }
+        }
+    }
+    else if (monomer_index == this->M - 1)
+    {
+        // 使用 Find_Last 方法生成 k_max 个候选位置
+        std::vector<double *> candidate_ptrs(k_max);
+
+        for (int i = 0; i < k_max; i++)
+        {
+            candidate_ptrs[i] = candidate_positions[i].data();
+        }
+        // 计算从倒数第二个单体到第一个单体的方向向量
+        // 使用 Find_Last 方法生成候选位置
+        this->Find_Last(r_new[this->M-2].data(), r_new[0].data(), candidate_ptrs.data(), k_max);
+
+        // 检查重叠并计算权重
+        for (int k = 0; k < k_max; k++)
+        {
+            // 体相系统无外势，权重为1
+            z_weights[k] = 1.0;
+            // 检查与其他聚合物的重叠
+            if (this->overlap_all_other_polymer(candidate_ptrs[k]))
+            {
+                z_weights[k] = 0.0;
+                continue;
+            }
+
+            // 检查与当前链的重叠（跳过第一个单体，因为最后一个单体需要与第一个单体连接）
+            for (int j = 1; j < this->M-2; j++)
+            {
+                if (this->overlap_other_monomer_one(r_new[j].data(), candidate_ptrs[k]))
+                {
+                    z_weights[k] = 0.0;
+                    break;
+                }
+            }
+        }
+    }
+    else // middle monomer
+    {
+        for (int k = 0; k < k_max; k++)
+        {
+            candidate_positions[k] = r_new[monomer_index - 1];
+            add_random_unit_vector(candidate_positions[k].data(), this->gen);
+
+            // 检查与其他聚合物的重叠
+            if (this->overlap_all_other_polymer(candidate_positions[k].data()))
+            {
+                z_weights[k] = 0.0;
+                P_road[k] = 0.0;
+                continue;
+            }
+
+            // 检查与当前链的重叠
+            for (int j = 0; j < monomer_index - 1; j++)
+            {
+                if (this->overlap_other_monomer_one(r_new[j].data(), candidate_positions[k].data()))
+                {
+                    z_weights[k] = 0.0;
+                    P_road[k] = 0.0;
+                    break;
+                }
+            }
+
+            if (z_weights[k] != 0.0)
+            {
+                // 计算两点之间的距离
+                double R = distance_array(r_new[0], candidate_positions[k]);
+
+                // 使用打表法计算路径概率 P_road
+                P_road[k] = g_p_road_table.get_P_road(R, grow_step);
+                // 体相系统无外势，权重等于路径概率
+                z_weights[k] = P_road[k];
+            }
+        }
+    }
+
+    // 计算总权重
+    double sum_z_eff = 0;
+    for (int k = 0; k < k_max; k++)
+    {
+        sum_z_eff += z_weights[k];
+    }
+
+    if (sum_z_eff == 0)
+    {
+        *Z_eff = 0;
+        return false; // 所有备选位置都重叠，插入失败
+    }
+    else
+    {
+        // 轮盘赌选择
+        int select = RouteWheel(z_weights.data(), k_max, this->gen);
+
+        r_new[monomer_index] = candidate_positions[select];
+
+        *Z_eff *= sum_z_eff / k_max / P_road[select]; // 归一化，除以k_max
+        return true;
+    }
+}
+
+void Bulk_RingPolymer::delete_one_monomer(std::vector<std::array<double, 3>> &r_delete, double *Z_eff, int monomer_index, int k_max)
+{
+    std::vector<std::array<double, 3>> candidate_positions(k_max);
+    std::vector<double> z_eff(k_max, 1.0);
+    std::vector<double> P_road(k_max, 1.0); // 把 k_max - 1 设成 老节点的位置
+    int grow_step = this->M - monomer_index;
+
+    // 对于第一个单体，需要随机生成位置
+    if (monomer_index == 0) // for first monomer
+    {
+        for (int k = 0; k < k_max-1; k++)
+        {
+            candidate_positions[k][0] = this->box_size[0] * this->uni_dis(this->gen);
+            candidate_positions[k][1] = this->box_size[1] * this->uni_dis(this->gen);
+            candidate_positions[k][2] = this->box_size[2] * this->uni_dis(this->gen);
+
+            // 检查与其他单体的重叠
+            if (this->overlap_all_other_polymer(candidate_positions[k].data()))
+            {
+                z_eff[k] = 0.0;
+            }
+            else
+            {
+                // 体相系统无外势，权重为1.0
+                z_eff[k] = 1.0;
+            }
+        }
+        // 第k_max-1个位置是原来的位置
+        z_eff[k_max-1] = 1.0; // 体相系统无外势
+
+    }
+    else if (monomer_index == this->M - 1) // for last monomer
+    {
+        std::vector<double *> candidate_ptrs(k_max-1);
+
+        for (int k = 0; k < k_max - 1; k++)
+        {
+            candidate_ptrs[k] = candidate_positions[k].data();
+        }
+        // 使用Find_Last生成可能的最后一个单体位置（与第一个单体连接）
+        this->Find_Last(r_delete[this->M-2].data(), r_delete[0].data(), candidate_ptrs.data(), k_max-1);
+        for( int k = 0; k < k_max - 1; k++)
+        {
+            // 体相系统无外势，权重初始为1.0
+            z_eff[k] = 1.0;
+            if (this->overlap_all_other_polymer(candidate_positions[k].data()))
+            {
+                z_eff[k] = 0.0;
+                continue;
+            }
+            // 检查与当前链其他单体的重叠（除了第一个和倒数第二个）
+            for (int j = 1; j < this->M - 2; j++)
+            {
+                if (this->overlap_other_monomer_one(r_delete[j].data(), candidate_positions[k].data()))
+                {
+                    z_eff[k] = 0.0;
+                    break;
+                }
+            }
+        }
+        z_eff[k_max - 1] = 1.0; // 体相系统无外势
+    }
+    else // for middle monomer
+    {
+        // 构建已插入单体的索引列表
+        std::vector<int> cal_index;
+        for (int j = 0; j < monomer_index; j++)
+        {
+            cal_index.push_back(j);
+        }
+        for (int k = 0; k < k_max - 1; k++)
+        {
+            // 从前一个单体位置开始
+            candidate_positions[k] = r_delete[monomer_index - 1];
+            // 添加随机单位向量
+            add_random_unit_vector(candidate_positions[k].data(), this->gen);
+
+            // 检查碰撞
+            bool overlap = false;
+            // 检查与当前链的重叠
+            for (int j = 0; j < monomer_index - 1; j++)
+            {
+                if (this->overlap_other_monomer_one(r_delete[j].data(), candidate_positions[k].data()))
+                {
+                    overlap = true;
+                    break;
+                }
+            }
+            // 检查与其他链的重叠
+            if (!overlap && this->overlap_all_other_polymer(candidate_positions[k].data()))
+            {
+                overlap = true;
+            }
+
+            if (overlap)
+            {
+                z_eff[k] = 0.0;
+                P_road[k] = 0.0;
+            }
+            else
+            {
+                // 计算两点之间的距离
+                double R = distance_array(r_delete[0], candidate_positions[k]);
+                // 使用打表法计算路径概率 P_road
+                P_road[k] = g_p_road_table.get_P_road(R, grow_step);
+                // 体相系统无外势，权重等于路径概率
+                z_eff[k] = P_road[k];
+            }
+        }
+
+        // 原来的位置
+        double R = distance_array(r_delete[0], r_delete[monomer_index]);
+        P_road[k_max - 1] = g_p_road_table.get_P_road(R, grow_step);
+        z_eff[k_max - 1] = P_road[k_max - 1];
+    }
+
+    double sum_z_eff = 0.0;
+    for (int k = 0; k < k_max; k++)
+    {
+        sum_z_eff += z_eff[k];
+    }
+
+    *Z_eff *= sum_z_eff / k_max / P_road[k_max - 1];
 }

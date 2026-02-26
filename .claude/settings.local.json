@@ -4,7 +4,20 @@
       "Bash(conda run:*)",
       "Bash(copy:*)",
       "Bash(\"T:/anaconda/envs/mcpolymer/python.exe\":*)",
-      "Bash(g++:*)"
+      "Bash(g++:*)",
+      "Bash(python -m py_compile:*)",
+      "Bash(conda:*)",
+      "Bash(python:*)",
+      "Bash(CONDA_NO_PLUGINS=true conda run:*)",
+      "Bash(py:*)",
+      "Bash(ls:*)",
+      "Bash(source activate:*)",
+      "Bash(chmod +x:*)",
+      "Bash(./test_conda_run.sh base:*)",
+      "Bash(cmd:*)",
+      "Bash(cd D:\\\\Desktop\\\\NewMuVTPolymer:*)",
+      "Bash(head:*)",
+      "Bash(tail:*)"
     ]
   }
 }

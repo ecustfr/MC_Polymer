@@ -177,8 +177,11 @@ PYBIND11_MODULE(pymcpolymer, m) {
         .def("delete_move", &MuVT_MC_RingPolymer::delete_move,
              py::arg("k_max"),
              py::arg("delete_index"),
-             "Delete a ring polymer with k_max candidate positions");
-
+             "Delete a ring polymer with k_max candidate positions")
+        .def("get_W_insert_ring", &MuVT_MC_RingPolymer::get_W_insert_ring,
+             py::arg("k_max"),
+             "Calculate insertion weight for ring polymer")
+        .def("get_W_insert_ring_z",&MuVT_MC_RingPolymer::get_W_insert_ring_z,py::arg("z"),py::arg("k_max"),"Calculate z-depend insert weight" );
     // Overridden MC move methods are automatically inherited, no need to rebind
 
     

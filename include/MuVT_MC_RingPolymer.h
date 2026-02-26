@@ -51,7 +51,7 @@ public:
     double get_W_insert_ring(int k_max);
     double get_G_insert_ring(double insert_z, int k_max);
     bool insert_recursive_ring(int next_idx, int parent_idx, double &Z_eff, std::vector<std::array<double, 3>> &r_new, std::vector<int> &is_inserted, int k_max);
-
+    double get_W_insert_ring_z(double z, int k_max);
     // Calculate insertion weight for polymer, used for chemical potential calculation
     // double calculate_insertion_weight(int k_max) override;
 };

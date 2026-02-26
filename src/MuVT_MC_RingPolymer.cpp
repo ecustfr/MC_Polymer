@@ -541,7 +541,7 @@ bool MuVT_MC_RingPolymer::insert_recursive_ring(
 
     std::vector<std::array<double, 3>> candidates(k_max);
     std::vector<double> z_weight(k_max, 0.0);
-    std::vector<double> P_road(k_max, 0.0);
+    std::vector<double> P_road(k_max, 1.0);
     double sum_z_weight = 0.0;
     int grow_step = this->M - next_idx;
 
@@ -556,7 +556,7 @@ bool MuVT_MC_RingPolymer::insert_recursive_ring(
             {
                 // 为了可读性应该加上下面两行，为了速度注释掉了，因为初始化的时候初始化好了
                 // z_weight[k] = 0;
-                // P_road[k] = 0.0;
+                P_road[k] = 0.0;
             }
             else
             {
@@ -579,33 +579,37 @@ bool MuVT_MC_RingPolymer::insert_recursive_ring(
         }
         // 计算从倒数第二个单体到第一个单体的方向向量
         // 使用 Find_Last 方法生成候选位置
-        this->Find_Last(r_new[this->M - 1].data(), r_new[0].data(), candidate_ptrs.data(), k_max);
+        this->Find_Last(r_new[this->M - 2].data(), r_new[0].data(), candidate_ptrs.data(), k_max);
 
         for (int k = 0; k < k_max; k++)
         {
             // 最后一个节点 需要单独对 已插入单体的碰撞做检测，因为最后一个节点与第一个节点相连，不能检测第一个节点，但是需要检测其他已插入的单体
-            for (int monomer_index = 1; monomer_index < this->M - 1; monomer_index++)
+            for (int monomer_index = 1; monomer_index < this->M - 2; monomer_index++)
             {
                 if (this->overlap_other_monomer_one(r_new[monomer_index].data(), candidates[k].data()))
                 {
                     // z_weight[k] = 0;
-                    // P_road[k] = 0.0;
+                    P_road[k] = 0.0;
+                    
                     break;
                 }
             }
+            if(P_road[k]==0){continue;}
             if (this->overlap_all_other_polymer(candidate_ptrs[k]))
             {
                 // z_weight[k] = 0;
-                // P_road[k] = 0.0;
+                P_road[k] = 0.0;
             }
             else
             {
                 // 最后一个 不需要计算 P_road
                 z_weight[k] = this->Vext_bz(candidate_ptrs[k]);
+                P_road[k] = 1;
                 sum_z_weight += z_weight[k];
             }
         }
     }
+
 
     if (sum_z_weight <= 1e-40)
         return false; // 递归出口
@@ -617,7 +621,7 @@ bool MuVT_MC_RingPolymer::insert_recursive_ring(
 
     // 4. 更新权重
     // Z_eff *=  / static_cast<double>(k_max);
-
+    Z_eff *= sum_z_weight / k_max / P_road[selected];
     // 5. 继续向同一方向递归（环状聚合物只向+1方向递归）
     return insert_recursive_ring(next_idx + 1, next_idx, Z_eff, r_new, is_inserted, k_max);
 }
@@ -682,4 +686,31 @@ void MuVT_MC_RingPolymer::insert_move_recursive_ring(int k_max)
     }
 
     return;
+}
+
+double MuVT_MC_RingPolymer::get_W_insert_ring_z(double z, int k_max)
+{
+    std::vector<std::array<double, 3>> r_new(this->M);
+    std::vector<int> is_inserted;
+    is_inserted.reserve(this->M);
+    double Z_eff = 1.0;
+    for (int d = 0; d < 2; ++d)
+    {
+        r_new[0][d] = this->box_size[d] * this->uni_dis(this->gen);
+    }
+    r_new[0][2] = z;
+    if (this->overlap_all_other_polymer(r_new[0].data()))
+    {
+        return 0; // 种子节点重叠，插入失败
+    }
+    is_inserted.push_back(0);
+
+    // 4. 使用 insert_recursive_ring 方法递归插入剩余的单体
+    if (!this->insert_recursive_ring(0 + 1, 0 , Z_eff, r_new, is_inserted, k_max))
+    {
+        return 0; // 递归插入失败
+    }
+    return Z_eff;
+
+    
 }

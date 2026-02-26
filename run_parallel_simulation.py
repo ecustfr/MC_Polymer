@@ -14,7 +14,7 @@ from pathlib import Path
 
 # 假设 run_simulation.py 在同级目录
 SCRIPT_DIR = Path(__file__).resolve().parent
-SIMULATION_SCRIPT = SCRIPT_DIR / 'run_simulation.py'
+SIMULATION_SCRIPT = SCRIPT_DIR / 'run_simulation_ring.py'
 
 def check_config_conflicts(config_files):
     """检测输出目录冲突"""
@@ -109,7 +109,7 @@ def run_single_task(config_path):
 
 def main():
     parser = argparse.ArgumentParser(description="Parallel Simulation Runner")
-    parser.add_argument('--input-dir', '-i', type=str, default=str(SCRIPT_DIR/ 'input/Linear_configs'))# input/Ring_configs
+    parser.add_argument('--input-dir', '-i', type=str, default=str(SCRIPT_DIR/'input/Ring_configs' ))# 'input/Linear_configs'
     parser.add_argument('--max-processes', '-m', type=int, default=3)
     args = parser.parse_args()
 

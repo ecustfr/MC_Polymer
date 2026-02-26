@@ -20,7 +20,7 @@ from external_potential import generate_vext_params
 # ==============================
 
 CURRENT_SCRIPT_DIR = Path(__file__).resolve().parent
-OUTPUT_ROOT = CURRENT_SCRIPT_DIR / "input" / "Linear_configs"
+OUTPUT_ROOT = CURRENT_SCRIPT_DIR / "input" / "Ring_configs"
 
 
 
@@ -45,10 +45,10 @@ BASE_CONFIG = {
         "EPS_TRANS": 0.02, 
         "ROT_RATIO": 0.3, 
         "K_MAX": 10,
-        "sample_interval": 8, 
-        "sample_time": 50000, 
+        "sample_interval": 5, 
+        "sample_time": 40000, 
         "sample_block": 3, 
-        "dz": 0.01
+        "dz": 0.02
 
     },
     "Vext_params": {},
@@ -63,7 +63,9 @@ BASE_CONFIG = {
 
 #必须置入的变量
 
-MUST_INPUT = {"H":6.0,"polymer_type":"Linear","knot_type":"Linear","init_N":64,"external_potential":"custom"}
+# MUST_INPUT = {"H":6.0,"polymer_type":"Linear","knot_type":"Linear","init_N":64,"external_potential":"custom"}
+MUST_INPUT = {"H":20.0,"polymer_type":"Ring","knot_type":"Trivial","init_N":64,"external_potential":"custom","C":0.2}
+
 # MUST_INPUT = {"H":6.0,"knot_type":"Linear","init_N":64,"external_potential":"custom"} 
 
 # 耦合变量
@@ -73,9 +75,9 @@ for item in COUPLED_GROUPS:
 
 
 INDEPENDENT_VARS = {
-    "M":[6],
+    "M":[8],
     "rho_b":[0.1],
-    "mu_b":[0.5,-1.5,1.5]
+    "mu_b":[2.0,3.0,4.0]
 }
 
 
@@ -149,17 +151,28 @@ def calculate_derived_params(params):
         # 传入 seed 确保可复现，这里简单用 Hash 模拟
         # seed = hash(config_fname) % (2**32)
         # 将生成的 Vext 参数直接放入一个特殊的 key，稍后处理
+        # 从参数中获取C值，如果没有则使用默认值
+        # step势能默认C=0.5，custom势能默认C=0.4（保持向后兼容）
+
+        # 获取用户提供的C值
+        user_C_value = p.get("C")
+
         if external_potential_type == "step":
             # 对于阶梯势能，可以指定高度参数
+            C_value = user_C_value if user_C_value is not None else 0.5  # 默认值0.5保持向后兼容
             p["_Vext_payload"] = generate_vext_params(
                 H,
                 potential_type=external_potential_type,
                 potential_mean=0.0,   # 平均高度
-                potential_std=3.0 ,    # 高度波动
-                C = 0.5
+                potential_std=3.0,    # 高度波动
+                C=C_value
             )
         else:
+            # custom势能 - generate_vext_params不再返回C参数，需要手动添加
+            C_value = user_C_value if user_C_value is not None else 0.4  # 默认值0.4保持向后兼容
             p["_Vext_payload"] = generate_vext_params(H, potential_type=external_potential_type)
+            # 添加C参数到Vext_payload中
+            p["_Vext_payload"]["C"] = C_value
 
     return p
 

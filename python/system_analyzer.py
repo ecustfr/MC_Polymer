@@ -335,5 +335,8 @@ def cal_W(sim:Any,k_max:int):
 
 def cal_W_ring(sim:Any,k_max:int):
     return sim.get_W_insert_ring(k_max)
+
+def cal_W_ring_z(sim:Any,z:float,k_max:int):
+    return sim.get_W_insert_ring_z(z,k_max)
 if __name__ == "__main__":
     pass

@@ -827,221 +827,6 @@ void MuVT_MC_LinearPolymer::rot_mid_move(int monomer_index ,int polymer_index)
 // 移动操作方法（插入和删除）
 // ======================================================================
 
-void MuVT_MC_LinearPolymer::old_insert_move(int k_max)
-{
-    this->num_insert++ ;
-    this->r_insert_temp[0][0] = this->box_size[0]*this->uni_dis(this->gen);
-    this->r_insert_temp[0][1] = this->box_size[1]*this->uni_dis(this->gen);
-    this->r_insert_temp[0][2] = this->box_size[2]*this->uni_dis(this->gen);
-
-    if(this->overlap_all_other_polymer(this->r_insert_temp[0]))
-    {
-        return ;
-    }
-
-    double W = 1;
-    double r_now[3] = {this->r_insert_temp[0][0], this->r_insert_temp[0][1], this->r_insert_temp[0][2]};
-
-    std::vector<double> Phi_HS_try(k_max,1.0);// exp(-\beta U_{hs})
-
-    // std::vector<double> Phi_ext_try(k_max,1.0); 
-    
-    std::vector<std::array<double,3>>  r_temp(k_max,std::array<double,3>{r_now[0], r_now[1], r_now[2]}); //插入链的单体位置备选
-    
-    int select_index = 0;
-
-    for(int monomer_index = 1; monomer_index<this->M; monomer_index++)
-    {
-        std::fill(Phi_HS_try.begin(), Phi_HS_try.end(), 1.0);
-        // 生成 k_max 个随机方向
-        for(int k = 0 ; k< k_max ; k++)
-        {
-            add_random_unit_vector(r_temp[k].data(), this->gen);
-        }
-
-        // 判断k_max 个备选位置是否与其它聚合物重叠
-        // Phi_try = 1.0; 不重叠
-        // Phi_try = 0.0; 重叠
-        for(int k=0 ; k<k_max ;k++)
-        {
-            if( this->overlap_all_other_polymer(r_temp[k].data()) )
-            {
-                Phi_HS_try[k] =0.0;
-                continue;
-            }
-            for( int old_monomer = 0 ; old_monomer < monomer_index -1; old_monomer++)
-            {
-                // std::cout << "old_monomer: " << old_monomer << std::endl;
-                if( this->overlap_other_monomer_one(this->r_insert_temp[old_monomer], r_temp[k].data()) )
-                {                   
-                    
-                    Phi_HS_try[k] = 0.0;
-                    break;
-                }
-            }
-        }
-
-        if( std::all_of(Phi_HS_try.begin(), Phi_HS_try.end(), [](double v) { return v == 0.0; }) )
-        {
-            return; // 所有备选位置都重叠，插入失败
-        }
-
-        W = W*sum_1d(Phi_HS_try.data(), k_max)/k_max;
-        
-        select_index = RouteWheel(Phi_HS_try.data(), k_max, this->gen);
-        this->r_insert_temp[monomer_index][0] = r_temp[select_index][0];
-        this->r_insert_temp[monomer_index][1] = r_temp[select_index][1];
-        this->r_insert_temp[monomer_index][2] = r_temp[select_index][2]; 
-
-        // 重置 r_temp
-        std::fill( r_temp.begin(), r_temp.end(), std::array<double,3> {r_temp[select_index][0],r_temp[select_index][1], r_temp[select_index][2]} );
-            
-    }
-
-
-    // 所有单体都可以被插入
-    double acc_ratio = this->exp_mu_b*W/(this->N_now+1)*(this->V);
-    if (acc_ratio  >this->uni_dis(this->gen))
-    {
-        this->acc_insert++;
-        for(int monomer_index =0 ; monomer_index < this->M ; monomer_index++)
-        {
-            for(int j =0 ; j<3 ; j++)
-            {
-                this->r_total[this->MN_now + monomer_index][j] = this->r_insert_temp[monomer_index][j];
-            }   
-        }
-        this->MN_now += this->M;
-        this->N_now++ ;
-
-        if(this->MN_now > this->cl_threshold)
-        {
-            this->build_cell_list();
-        }
-    }
-    
-    return;
-
-    // 插入一个聚合物链
-    /*
-    this->num_insert++ ;
-    
-    // 为第一个粒子生成k_max个候选位置
-    std::vector<std::array<double,3>> r_temp_first(k_max);
-    std::vector<double> Phi_HS_try_first(k_max, 1.0);
-    
-    for(int k = 0; k < k_max; k++)
-    {
-        r_temp_first[k][0] = this->box_size[0] * this->uni_dis(this->gen);
-        r_temp_first[k][1] = this->box_size[1] * this->uni_dis(this->gen);
-        r_temp_first[k][2] = this->box_size[2] * this->uni_dis(this->gen);
-        
-        // 检查与其他聚合物的重叠
-        if(this->overlap_all_other_polymer(r_temp_first[k].data()))
-        {
-            Phi_HS_try_first[k] = 0.0;
-        }
-    }
-    
-    // 检查是否所有位置都重叠
-    if(std::all_of(Phi_HS_try_first.begin(), Phi_HS_try_first.end(), [](double v) { return v == 0.0; }))
-    {
-        return; // 所有备选位置都重叠，插入失败
-    }
-    
-    // 计算权重并选择一个位置
-    double sum_phi_first = sum_1d(Phi_HS_try_first.data(), k_max);
-    double W = sum_phi_first / k_max; // 归一化，除以k_max
-    int select_index = RouteWheel(Phi_HS_try_first.data(), k_max, this->gen);
-    
-    // 更新第一个粒子的位置
-    this->r_insert_temp[0][0] = r_temp_first[select_index][0];
-    this->r_insert_temp[0][1] = r_temp_first[select_index][1];
-    this->r_insert_temp[0][2] = r_temp_first[select_index][2];
-
-    double r_now[3] = {this->r_insert_temp[0][0], this->r_insert_temp[0][1], this->r_insert_temp[0][2]};
-
-    std::vector<double> Phi_HS_try(k_max,1.0);// exp(-\beta U_{hs})
-
-    // std::vector<double> Phi_ext_try(k_max,1.0); 
-    
-    std::vector<std::array<double,3>>  r_temp(k_max,std::array<double,3>{r_now[0], r_now[1], r_now[2]}); //插入链的单体位置备选
-
-    for(int monomer_index = 1; monomer_index<this->M; monomer_index++)
-    {
-        std::fill(Phi_HS_try.begin(), Phi_HS_try.end(), 1.0);
-        // 生成 k_max 个随机方向
-        for(int k = 0 ; k< k_max ; k++)
-        {
-            add_random_unit_vector(r_temp[k].data(), this->gen);
-        }
-
-        // 判断k_max 个备选位置是否与其它聚合物重叠
-        // Phi_try = 1.0; 不重叠
-        // Phi_try = 0.0; 重叠
-        for(int k=0 ; k<k_max ;k++)
-        {
-            if( this->overlap_all_other_polymer(r_temp[k].data()) )
-            {
-                Phi_HS_try[k] =0.0;
-                continue;
-            }
-            for( int old_monomer = 0 ; old_monomer < monomer_index -1; old_monomer++)
-            {
-                // std::cout << "old_monomer: " << old_monomer << std::endl;
-                if( this->overlap_other_monomer_one(this->r_insert_temp[old_monomer], r_temp[k].data()) )
-                {                   
-                    
-                    Phi_HS_try[k] = 0.0;
-                    break;
-                }
-            }
-        }
-
-        if( std::all_of(Phi_HS_try.begin(), Phi_HS_try.end(), [](double v) { return v == 0.0; }) )
-        {
-            return; // 所有备选位置都重叠，插入失败
-        }
-
-        W = W*sum_1d(Phi_HS_try.data(), k_max)/k_max; // 归一化，除以k_max
-        
-        select_index = RouteWheel(Phi_HS_try.data(), k_max, this->gen);
-        this->r_insert_temp[monomer_index][0] = r_temp[select_index][0];
-        this->r_insert_temp[monomer_index][1] = r_temp[select_index][1];
-        this->r_insert_temp[monomer_index][2] = r_temp[select_index][2]; 
-
-        // 重置 r_temp
-        std::fill( r_temp.begin(), r_temp.end(), std::array<double,3> {r_temp[select_index][0],r_temp[select_index][1], r_temp[select_index][2]} );
-            
-    }
-
-
-    // 所有单体都可以被插入
-    double acc_ratio = this->exp_mu_b*W/(this->N_now+1)*(this->V);
-    if (acc_ratio  >this->uni_dis(this->gen))
-    {
-        this->acc_insert++;
-        for(int monomer_index =0 ; monomer_index < this->M ; monomer_index++)
-        {
-            for(int j =0 ; j<3 ; j++)
-            {
-                this->r_total[this->MN_now + monomer_index][j] = this->r_insert_temp[monomer_index][j];
-            }   
-        }
-        this->MN_now += this->M;
-        this->N_now++ ;
-
-        if(this->MN_now > this->cl_threshold)
-        {
-            this->build_cell_list();
-        }
-    }
-    
-    return;
-
-    // 插入一个聚合物链
-    */
-}
 
 // 插入单个单体
 bool MuVT_MC_LinearPolymer::insert_one_monomer( std::vector<std::array<double, 3>> &r_new, double *W ,int monomer_index , int k_max )
@@ -1280,178 +1065,6 @@ void MuVT_MC_LinearPolymer::delete_move(int k_max, int delete_index)
     }
 }
 
-
-void MuVT_MC_LinearPolymer::old_delete_move(int k_max, int delete_polymer_index)
-{
-        int delete_first_monomer_index = (delete_polymer_index) * this->M;
-    int last_polymer_start = this->MN_now - this->M;
-
-    this->num_delete++;
-
-    // 交换指针，把要删除的聚合物链放到最后面
-    for(int monomer_index = 0 ; monomer_index < this->M ; monomer_index++)
-    {
-        std::swap( this->r_total[delete_first_monomer_index + monomer_index] , this->r_total[last_polymer_start + monomer_index] );
-    }
-    
-    // 更新cell列表，因为粒子位置已经改变
-    if(this->MN_now > this->cl_threshold)
-    {
-        this->build_cell_list();
-    }
-
-    // 先假设聚合物被删除
-    this->MN_now -= this->M;
-    this->N_now -= 1;
-     
-    double W = 1.0;
-    std::vector<std::array<double,3>> r_temp(k_max-1); // 被删除单体的位置备选
-
-    std::vector<double> Phi_HS_try(k_max-1,1.0);
-
-    std::fill(r_temp.begin(), r_temp.end(), std::array<double,3>{this->r_total[this->MN_now][0], this->r_total[this->MN_now][1], this->r_total[this->MN_now][2]}); 
-
-    for(int monomer_index = 1; monomer_index < this->M; monomer_index++)
-    {
-        std::fill(Phi_HS_try.begin(), Phi_HS_try.end(), 1.0);
-        for(int k=0 ; k<k_max-1 ; k++)
-        {
-            add_random_unit_vector(r_temp[k].data(),this->gen);
-        }
-
-        for(int k=0 ; k<k_max-1 ; k++)
-        {
-            if( this->overlap_all_other_polymer(r_temp[k].data()) ) // 把聚合物链放到最后就是为了方便这一步
-            {
-                Phi_HS_try[k] =0.0;
-                continue;
-            }
-            for( int old_monomer = 0 ; old_monomer <monomer_index-1  ; old_monomer++)
-            {
-                if( this->overlap_other_monomer_one(this->r_total[this->MN_now + old_monomer], r_temp[k].data()) )
-                {
-                    Phi_HS_try[k] = 0.0;
-                    break;
-                }
-            }
-        }
-
-        W = W*(sum_1d(Phi_HS_try.data(),k_max-1)+1)/k_max;
-        std::fill( r_temp.begin(), r_temp.end(), std::array<double,3> 
-        {this->r_total[this->MN_now+monomer_index][0],this->r_total[this->MN_now+monomer_index][1], this->r_total[this->MN_now+monomer_index][2]} );
-
-    }
-    double acc_ratio = 1/W * (this->N_now+1)/(this->V) * 1/this->exp_mu_b;
-    if(acc_ratio > uni_dis(gen))
-    {
-        this->acc_delete++;
-        // 接受删除，重建cell列表
-        this->build_cell_list();
-    }
-    else
-    {
-        // 拒绝删除，恢复MN_now和N_now
-        this->MN_now += this->M;
-        this->N_now += 1;
-        
-        // 将聚合物链交换回原来的位置
-        for(int monomer_index = 0 ; monomer_index < this->M ; monomer_index++)
-        {
-            std::swap( this->r_total[delete_first_monomer_index + monomer_index] , this->r_total[last_polymer_start + monomer_index] );
-        }
-        
-        // 更新cell列表，恢复正确的粒子位置
-        if(this->MN_now > this->cl_threshold)
-        {
-            this->build_cell_list();
-        }
-    }
-    /*
-    int delete_first_monomer_index = (delete_polymer_index) * this->M;
-    int last_polymer_start = this->MN_now - this->M;
-
-    this->num_delete++;
-
-    // 交换指针，把要删除的聚合物链放到最后面
-    for(int monomer_index = 0 ; monomer_index < this->M ; monomer_index++)
-    {
-        std::swap( this->r_total[delete_first_monomer_index + monomer_index] , this->r_total[last_polymer_start + monomer_index] );
-    }
-    
-    // 更新cell列表，因为粒子位置已经改变
-    if(this->MN_now > this->cl_threshold)
-    {
-        this->build_cell_list();
-    }
-
-    // 先假设聚合物被删除
-    this->MN_now -= this->M;
-    this->N_now -= 1;
-     
-    double W = 1.0;
-    std::vector<std::array<double,3>> r_temp(k_max-1); // 被删除单体的位置备选
-
-    std::vector<double> Phi_HS_try(k_max-1,1.0);
-
-    std::fill(r_temp.begin(), r_temp.end(), std::array<double,3>{this->r_total[this->MN_now][0], this->r_total[this->MN_now][1], this->r_total[this->MN_now][2]}); 
-
-    for(int monomer_index = 1; monomer_index < this->M; monomer_index++)
-    {
-        std::fill(Phi_HS_try.begin(), Phi_HS_try.end(), 1.0);
-        for(int k=0 ; k<k_max-1 ; k++)
-        {
-            add_random_unit_vector(r_temp[k].data(),this->gen);
-        }
-
-        for(int k=0 ; k<k_max-1 ; k++)
-        {
-            if( this->overlap_all_other_polymer(r_temp[k].data()) ) // 把聚合物链放到最后就是为了方便这一步
-            {
-                Phi_HS_try[k] =0.0;
-                continue;
-            }
-            for( int old_monomer = 0 ; old_monomer <monomer_index-1  ; old_monomer++)
-            {
-                if( this->overlap_other_monomer_one(this->r_total[this->MN_now + old_monomer], r_temp[k].data()) )
-                {
-                    Phi_HS_try[k] = 0.0;
-                    break;
-                }
-            }
-        }
-
-        W = W*(sum_1d(Phi_HS_try.data(),k_max-1)+1)/k_max;
-        std::fill( r_temp.begin(), r_temp.end(), std::array<double,3> 
-        {this->r_total[this->MN_now+monomer_index][0],this->r_total[this->MN_now+monomer_index][1], this->r_total[this->MN_now+monomer_index][2]} );
-
-    }
-    double acc_ratio = 1/W * (this->N_now+1)/(this->V) * 1/this->exp_mu_b;
-    if(acc_ratio > uni_dis(gen))
-    {
-        this->acc_delete++;
-        // 接受删除，重建cell列表
-        this->build_cell_list();
-    }
-    else
-    {
-        // 拒绝删除，恢复MN_now和N_now
-        this->MN_now += this->M;
-        this->N_now += 1;
-        
-        // 将聚合物链交换回原来的位置
-        for(int monomer_index = 0 ; monomer_index < this->M ; monomer_index++)
-        {
-            std::swap( this->r_total[delete_first_monomer_index + monomer_index] , this->r_total[last_polymer_start + monomer_index] );
-        }
-        
-        // 更新cell列表，恢复正确的粒子位置
-        if(this->MN_now > this->cl_threshold)
-        {
-            this->build_cell_list();
-        }
-    }
-    */
-}
 
 
 
@@ -2495,3 +2108,190 @@ double MuVT_MC_LinearPolymer::calculate_external_energy() const {
 
     return total_external_energy;
 }
+
+//-------------------------------------------------------------------------------------------------------------------
+//---old code ---
+void MuVT_MC_LinearPolymer::old_insert_move(int k_max)
+{
+    this->num_insert++ ;
+    this->r_insert_temp[0][0] = this->box_size[0]*this->uni_dis(this->gen);
+    this->r_insert_temp[0][1] = this->box_size[1]*this->uni_dis(this->gen);
+    this->r_insert_temp[0][2] = this->box_size[2]*this->uni_dis(this->gen);
+
+    if(this->overlap_all_other_polymer(this->r_insert_temp[0]))
+    {
+        return ;
+    }
+
+    double W = 1;
+    double r_now[3] = {this->r_insert_temp[0][0], this->r_insert_temp[0][1], this->r_insert_temp[0][2]};
+
+    std::vector<double> Phi_HS_try(k_max,1.0);// exp(-\beta U_{hs})
+
+    // std::vector<double> Phi_ext_try(k_max,1.0); 
+    
+    std::vector<std::array<double,3>>  r_temp(k_max,std::array<double,3>{r_now[0], r_now[1], r_now[2]}); //插入链的单体位置备选
+    
+    int select_index = 0;
+
+    for(int monomer_index = 1; monomer_index<this->M; monomer_index++)
+    {
+        std::fill(Phi_HS_try.begin(), Phi_HS_try.end(), 1.0);
+        // 生成 k_max 个随机方向
+        for(int k = 0 ; k< k_max ; k++)
+        {
+            add_random_unit_vector(r_temp[k].data(), this->gen);
+        }
+
+        // 判断k_max 个备选位置是否与其它聚合物重叠
+        // Phi_try = 1.0; 不重叠
+        // Phi_try = 0.0; 重叠
+        for(int k=0 ; k<k_max ;k++)
+        {
+            if( this->overlap_all_other_polymer(r_temp[k].data()) )
+            {
+                Phi_HS_try[k] =0.0;
+                continue;
+            }
+            for( int old_monomer = 0 ; old_monomer < monomer_index -1; old_monomer++)
+            {
+                // std::cout << "old_monomer: " << old_monomer << std::endl;
+                if( this->overlap_other_monomer_one(this->r_insert_temp[old_monomer], r_temp[k].data()) )
+                {                   
+                    
+                    Phi_HS_try[k] = 0.0;
+                    break;
+                }
+            }
+        }
+
+        if( std::all_of(Phi_HS_try.begin(), Phi_HS_try.end(), [](double v) { return v == 0.0; }) )
+        {
+            return; // 所有备选位置都重叠，插入失败
+        }
+
+        W = W*sum_1d(Phi_HS_try.data(), k_max)/k_max;
+        
+        select_index = RouteWheel(Phi_HS_try.data(), k_max, this->gen);
+        this->r_insert_temp[monomer_index][0] = r_temp[select_index][0];
+        this->r_insert_temp[monomer_index][1] = r_temp[select_index][1];
+        this->r_insert_temp[monomer_index][2] = r_temp[select_index][2]; 
+
+        // 重置 r_temp
+        std::fill( r_temp.begin(), r_temp.end(), std::array<double,3> {r_temp[select_index][0],r_temp[select_index][1], r_temp[select_index][2]} );
+            
+    }
+
+
+    // 所有单体都可以被插入
+    double acc_ratio = this->exp_mu_b*W/(this->N_now+1)*(this->V);
+    if (acc_ratio  >this->uni_dis(this->gen))
+    {
+        this->acc_insert++;
+        for(int monomer_index =0 ; monomer_index < this->M ; monomer_index++)
+        {
+            for(int j =0 ; j<3 ; j++)
+            {
+                this->r_total[this->MN_now + monomer_index][j] = this->r_insert_temp[monomer_index][j];
+            }   
+        }
+        this->MN_now += this->M;
+        this->N_now++ ;
+
+        if(this->MN_now > this->cl_threshold)
+        {
+            this->build_cell_list();
+        }
+    }
+    
+    return;
+}
+
+void MuVT_MC_LinearPolymer::old_delete_move(int k_max, int delete_polymer_index)
+{
+        int delete_first_monomer_index = (delete_polymer_index) * this->M;
+    int last_polymer_start = this->MN_now - this->M;
+
+    this->num_delete++;
+
+    // 交换指针，把要删除的聚合物链放到最后面
+    for(int monomer_index = 0 ; monomer_index < this->M ; monomer_index++)
+    {
+        std::swap( this->r_total[delete_first_monomer_index + monomer_index] , this->r_total[last_polymer_start + monomer_index] );
+    }
+    
+    // 更新cell列表，因为粒子位置已经改变
+    if(this->MN_now > this->cl_threshold)
+    {
+        this->build_cell_list();
+    }
+
+    // 先假设聚合物被删除
+    this->MN_now -= this->M;
+    this->N_now -= 1;
+     
+    double W = 1.0;
+    std::vector<std::array<double,3>> r_temp(k_max-1); // 被删除单体的位置备选
+
+    std::vector<double> Phi_HS_try(k_max-1,1.0);
+
+    std::fill(r_temp.begin(), r_temp.end(), std::array<double,3>{this->r_total[this->MN_now][0], this->r_total[this->MN_now][1], this->r_total[this->MN_now][2]}); 
+
+    for(int monomer_index = 1; monomer_index < this->M; monomer_index++)
+    {
+        std::fill(Phi_HS_try.begin(), Phi_HS_try.end(), 1.0);
+        for(int k=0 ; k<k_max-1 ; k++)
+        {
+            add_random_unit_vector(r_temp[k].data(),this->gen);
+        }
+
+        for(int k=0 ; k<k_max-1 ; k++)
+        {
+            if( this->overlap_all_other_polymer(r_temp[k].data()) ) // 把聚合物链放到最后就是为了方便这一步
+            {
+                Phi_HS_try[k] =0.0;
+                continue;
+            }
+            for( int old_monomer = 0 ; old_monomer <monomer_index-1  ; old_monomer++)
+            {
+                if( this->overlap_other_monomer_one(this->r_total[this->MN_now + old_monomer], r_temp[k].data()) )
+                {
+                    Phi_HS_try[k] = 0.0;
+                    break;
+                }
+            }
+        }
+
+        W = W*(sum_1d(Phi_HS_try.data(),k_max-1)+1)/k_max;
+        std::fill( r_temp.begin(), r_temp.end(), std::array<double,3> 
+        {this->r_total[this->MN_now+monomer_index][0],this->r_total[this->MN_now+monomer_index][1], this->r_total[this->MN_now+monomer_index][2]} );
+
+    }
+    double acc_ratio = 1/W * (this->N_now+1)/(this->V) * 1/this->exp_mu_b;
+    if(acc_ratio > uni_dis(gen))
+    {
+        this->acc_delete++;
+        // 接受删除，重建cell列表
+        this->build_cell_list();
+    }
+    else
+    {
+        // 拒绝删除，恢复MN_now和N_now
+        this->MN_now += this->M;
+        this->N_now += 1;
+        
+        // 将聚合物链交换回原来的位置
+        for(int monomer_index = 0 ; monomer_index < this->M ; monomer_index++)
+        {
+            std::swap( this->r_total[delete_first_monomer_index + monomer_index] , this->r_total[last_polymer_start + monomer_index] );
+        }
+        
+        // 更新cell列表，恢复正确的粒子位置
+        if(this->MN_now > this->cl_threshold)
+        {
+            this->build_cell_list();
+        }
+    }
+
+}
+
