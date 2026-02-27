@@ -483,6 +483,170 @@ void MuVT_MC_LinearPolymer::set_seed(unsigned int seed)
 // 辅助计算方法
 // ======================================================================
 
+
+// claude write 牛车 
+void MuVT_MC_LinearPolymer::Find_Last(double *r1, double *r2, double **r_temp_rot, int k_max)
+{
+    // 计算向量 v = r2 - r1 和中间点 M
+    double v[3] = {r2[0] - r1[0], r2[1] - r1[1], r2[2] - r1[2]};
+    double d2 = v[0]*v[0] + v[1]*v[1] + v[2]*v[2]; // |v|^2
+
+    // 提前检查：如果 d2 > 4.0，则 d > 2.0，无法生成候选位置
+    if (d2 >4.004 ) {
+        double M[3] = {(r1[0] + r2[0]) / 2, (r1[1] + r2[1]) / 2, (r1[2] + r2[2]) / 2};
+        for (int i = 0; i < k_max; i++) {
+            r_temp_rot[i][0] = M[0];
+            r_temp_rot[i][1] = M[1];
+            r_temp_rot[i][2] = M[2];
+        }
+        if (d2 > 4.01)
+        {        
+            std::cout << r1[0] << " " << r1[1] << " " << r1[2] << std::endl;
+            std::cout << r2[0] << " " << r2[1] << " " << r2[2] << std::endl;
+            throw std::runtime_error("Find_Last failed: distance between r1 and r2 > 2.0");
+        }
+        // 抛出异常，让调用者知道生成失败
+
+    }
+
+    double d = sqrt(d2);
+    double M[3] = {(r1[0] + r2[0]) / 2, (r1[1] + r2[1]) / 2, (r1[2] + r2[2]) / 2};
+
+    // 处理 d 过小的情况（r1 和 r2 几乎重合）
+    const double EPSILON = 1e-12;
+    if (d < EPSILON) {
+        // 无法定义正交平面，返回中点并抛出异常
+        for (int i = 0; i < k_max; i++) {
+            r_temp_rot[i][0] = M[0];
+            r_temp_rot[i][1] = M[1];
+            r_temp_rot[i][2] = M[2];
+        }
+        throw std::runtime_error("Find_Last failed: distance between r1 and r2 too small");
+    }
+
+    // 计算半径 R = sqrt(diameter^2 - (d/2)^2)
+    double R_sq = diameter2 - d2 / 4.0;
+    double R = sqrt(R_sq);
+
+    // 生成两个正交的单位向量 u, w 垂直于 v
+    double u[3], w[3];
+
+    // 方法：选择一个与 v 不正交的临时向量，通过叉积获得正交基
+    // 避免数值问题：选择 v 中绝对值最大的分量
+    double abs_x = fabs(v[0]), abs_y = fabs(v[1]), abs_z = fabs(v[2]);
+
+    if (abs_x > abs_y) {
+        if (abs_x > abs_z) {
+            // v 主要沿 x 方向，使用 (0, 1, 0) 作为临时向量
+            u[0] = 0.0; u[1] = 1.0; u[2] = 0.0;
+        } else {
+            // v 主要沿 z 方向，使用 (1, 0, 0) 作为临时向量
+            u[0] = 1.0; u[1] = 0.0; u[2] = 0.0;
+        }
+    } else {
+        if (abs_y > abs_z) {
+            // v 主要沿 y 方向，使用 (0, 0, 1) 作为临时向量
+            u[0] = 0.0; u[1] = 0.0; u[2] = 1.0;
+        } else {
+            // v 主要沿 z 方向，使用 (1, 0, 0) 作为临时向量
+            u[0] = 1.0; u[1] = 0.0; u[2] = 0.0;
+        }
+    }
+
+    // 计算 w = v × u
+    w[0] = v[1]*u[2] - v[2]*u[1];
+    w[1] = v[2]*u[0] - v[0]*u[2];
+    w[2] = v[0]*u[1] - v[1]*u[0];
+
+    // 归一化 w
+    double w_len_sq = w[0]*w[0] + w[1]*w[1] + w[2]*w[2];
+    double w_len = sqrt(w_len_sq);
+
+    if (w_len < 1e-12) {
+        // 如果 v 与 u 平行，尝试另一个 u
+        u[0] = 1.0; u[1] = 0.0; u[2] = 0.0;
+        w[0] = v[1]*u[2] - v[2]*u[1];
+        w[1] = v[2]*u[0] - v[0]*u[2];
+        w[2] = v[0]*u[1] - v[1]*u[0];
+        w_len_sq = w[0]*w[0] + w[1]*w[1] + w[2]*w[2];
+        w_len = sqrt(w_len_sq);
+    }
+
+    // 归一化 w：w_unit = w / w_len
+    double inv_w_len = 1.0 / w_len;
+    w[0] *= inv_w_len; w[1] *= inv_w_len; w[2] *= inv_w_len;
+
+    // 计算 u = w × v (确保正交右手系)
+    // 注意：|w × v| = |w| * |v| * sin(90°) = 1 * d * 1 = d
+    u[0] = w[1]*v[2] - w[2]*v[1];
+    u[1] = w[2]*v[0] - w[0]*v[2];
+    u[2] = w[0]*v[1] - w[1]*v[0];
+
+    // 归一化 u：u_unit = u / d（因为 |u| = d）
+    double inv_d = 1.0 / d;
+    u[0] *= inv_d; u[1] *= inv_d; u[2] *= inv_d;
+
+    // 预计算常数
+    const double TWO_PI = 2.0 * M_PI;
+
+    // 生成 k_max 个随机角度的候选位置
+    // 使用局部变量减少数组索引开销
+    double Mx = M[0], My = M[1], Mz = M[2];
+    double ux = u[0], uy = u[1], uz = u[2];
+    double wx = w[0], wy = w[1], wz = w[2];
+
+    for (int i = 0; i < k_max; i++) {
+        double theta = TWO_PI * this->uni_dis(this->gen);
+        double cos_theta, sin_theta;
+        // 使用 sincos 同时计算正弦和余弦（如果编译器支持）
+        // 否则回退到单独的 cos 和 sin
+#ifdef _GNU_SOURCE
+        sincos(theta, &sin_theta, &cos_theta);
+#else
+        cos_theta = cos(theta);
+        sin_theta = sin(theta);
+#endif
+
+        // 位置公式: B = M + R * (cosθ * u + sinθ * w)
+        // 展开计算以减少临时变量
+        double term_x = cos_theta * ux + sin_theta * wx;
+        double term_y = cos_theta * uy + sin_theta * wy;
+        double term_z = cos_theta * uz + sin_theta * wz;
+
+        r_temp_rot[i][0] = Mx + R * term_x;
+        r_temp_rot[i][1] = My + R * term_y;
+        r_temp_rot[i][2] = Mz + R * term_z;
+    }
+
+    // 调试验证：检查第一个候选位置到 r1 和 r2 的距离（仅在调试时启用）
+    bool debug_check = false;
+    if (debug_check && k_max > 0) {
+        double* B = r_temp_rot[0];
+        double dx1 = B[0] - r1[0], dy1 = B[1] - r1[1], dz1 = B[2] - r1[2];
+        double dx2 = B[0] - r2[0], dy2 = B[1] - r2[1], dz2 = B[2] - r2[2];
+        double dist1_sq = dx1*dx1 + dy1*dy1 + dz1*dz1;
+        double dist2_sq = dx2*dx2 + dy2*dy2 + dz2*dz2;
+        double dist1 = sqrt(dist1_sq);
+        double dist2 = sqrt(dist2_sq);
+
+        if (fabs(dist1 - 1.0) > 0.001 || fabs(dist2 - 1.0) > 0.001 || fabs(dist1 - dist2) > 0.001) {
+            std::cout << "DEBUG Find_Last validation failed:" << std::endl;
+            std::cout << "  d = " << d << ", R = " << R << std::endl;
+            std::cout << "  dist to r1 = " << dist1 << ", dist to r2 = " << dist2 << std::endl;
+            std::cout << "  difference = " << fabs(dist1 - dist2) << std::endl;
+            std::cout << "  v = [" << v[0] << ", " << v[1] << ", " << v[2] << "]" << std::endl;
+            std::cout << "  u = [" << ux << ", " << uy << ", " << uz << "]" << std::endl;
+            std::cout << "  w = [" << wx << ", " << wy << ", " << wz << "]" << std::endl;
+            std::cout << "  M = [" << Mx << ", " << My << ", " << Mz << "]" << std::endl;
+            std::cout << "  B = [" << B[0] << ", " << B[1] << ", " << B[2] << "]" << std::endl;
+        }
+    }
+
+    // 成功生成候选位置
+    return;
+}
+
+/*
 void MuVT_MC_LinearPolymer::Find_Last(double *r1, double *r2, double **r_temp_rot, int k_max)
 {
     std::vector<double> temp_theta;
@@ -546,7 +710,7 @@ void MuVT_MC_LinearPolymer::Find_Last(double *r1, double *r2, double **r_temp_ro
 
     // 找到最后一个旋转的单体
 }
-
+*/
 //-----------------------------------------------------------------------------------------------------------------
 //----- 聚合物移动方程 ------
 // 对 r_temp_rot 进行旋转，size[r_temp_rot]:k_max * 3
@@ -593,38 +757,18 @@ void MuVT_MC_LinearPolymer::Rot_temp(double *vec, double **r_temp_rot, int k_max
 
 void MuVT_MC_LinearPolymer::rot_polymer_move(int polymer_index)
 {
-    std::vector<bool> rot_list(this->M,false);
-    // std::cout << "polymer_index: " << polymer_index << std::endl;
-    for(int monomer_index =0 ; monomer_index < this->M ; monomer_index++)
-    {
-        if( this->uni_dis(this->gen) < this->rot_ratio)
-        {
-            rot_list[monomer_index] = true;
+    // 对每个单体独立决定是否旋转，避免额外的vector分配
+    for (int monomer_index = 0; monomer_index < this->M; monomer_index++) {
+        if (this->uni_dis(this->gen) < this->rot_ratio) {
+            if (monomer_index == 0) {
+                this->rot_end_move(monomer_index, polymer_index, 1);
+            } else if (monomer_index == this->M - 1) {
+                this->rot_end_move(monomer_index, polymer_index, -1);
+            } else {
+                this->rot_mid_move(monomer_index, polymer_index);
+            }
         }
     }
-    
-    for(int monomer_index = 0; monomer_index < this->M ; monomer_index++)
-    {
-
-       if(rot_list[monomer_index])
-       {
-            if(monomer_index == 0)
-            {
-               
-                this->rot_end_move(monomer_index,polymer_index, 1);
-            }
-            else if(monomer_index == this->M-1)
-            {
-                this->rot_end_move(monomer_index,polymer_index,-1);
-            }
-            else
-            {
-                this->rot_mid_move(monomer_index,polymer_index);
-            }
-       }
-    }
-
-
 }
 
 // 向系统中插入一个聚合物链
@@ -714,6 +858,125 @@ void MuVT_MC_LinearPolymer::rot_end_move(int monomer_index ,int polymer_index, i
 
 // 使用 check_collision_except_monomer 函数重写的 rot_mid_move 函数
 
+// claude write too slow
+void MuVT_MC_LinearPolymer::rot_mid_move(int monomer_index ,int polymer_index)
+{
+    this->num_rot++;
+    int real_monomer_index = polymer_index * this->M + monomer_index;
+    int now_monomer = polymer_index * this->M + monomer_index;
+
+    // 距离检查配置（默认关闭以优化性能）
+    constexpr bool ENABLE_DISTANCE_CHECK = false;
+    constexpr double MIN_ALLOWED = 1.0 - 0.001;
+    constexpr double MAX_ALLOWED = 1.0 + 0.001;
+    constexpr double MIN_ALLOWED_SQ = MIN_ALLOWED * MIN_ALLOWED;
+    constexpr double MAX_ALLOWED_SQ = MAX_ALLOWED * MAX_ALLOWED;
+
+    // 获取前后单体位置
+    double r_prev[3];
+    double r_next[3];
+
+    int last_monomer = polymer_index * this->M + this->topology_map[monomer_index][0];
+    int next_monomer = polymer_index * this->M + this->topology_map[monomer_index][1];
+
+    // 直接复制位置，避免循环开销
+    r_prev[0] = this->r_total[last_monomer][0];
+    r_prev[1] = this->r_total[last_monomer][1];
+    r_prev[2] = this->r_total[last_monomer][2];
+    r_next[0] = this->r_total[next_monomer][0];
+    r_next[1] = this->r_total[next_monomer][1];
+    r_next[2] = this->r_total[next_monomer][2];
+
+    // 一次性生成所有候选位置 (2*k_max-1 个)
+    int total_candidates = 2 * this->k_max - 1;
+    std::vector<std::array<double, 3>> candidate_positions(total_candidates);
+    std::vector<double*> candidate_ptrs(total_candidates);
+
+    for (int i = 0; i < total_candidates; i++) {
+        candidate_ptrs[i] = candidate_positions[i].data();
+    }
+
+    // 使用 try-catch 捕获 Find_Last 异常并输出调试信息
+    try {
+        Find_Last(r_prev, r_next, candidate_ptrs.data(), total_candidates);
+    } catch (const std::runtime_error& e) {
+        // 输出调试信息
+        std::cerr << "Find_Last failed in rot_mid_move:" << std::endl;
+        std::cerr << "  Error: " << e.what() << std::endl;
+        std::cerr << "  polymer_index: " << polymer_index << ", monomer_index: " << monomer_index << std::endl;
+        std::cerr << "  last_monomer: " << last_monomer << ", next_monomer: " << next_monomer << std::endl;
+        std::cerr << "  r_prev: [" << r_prev[0] << ", " << r_prev[1] << ", " << r_prev[2] << "]" << std::endl;
+        std::cerr << "  r_next: [" << r_next[0] << ", " << r_next[1] << ", " << r_next[2] << "]" << std::endl;
+        std::cerr << "  distance between r_prev and r_next: "
+                  << sqrt((r_next[0]-r_prev[0])*(r_next[0]-r_prev[0]) +
+                         (r_next[1]-r_prev[1])*(r_next[1]-r_prev[1]) +
+                         (r_next[2]-r_prev[2])*(r_next[2]-r_prev[2])) << std::endl;
+        return; // 旋转失败
+    }
+
+    // 计算权重 w = exp(-βu)，如果不重叠则为玻尔兹曼因子，重叠则为0
+    std::vector<double> w(total_candidates, 1.0);
+    bool all_overlap = true;
+
+    for (int k = 0; k < total_candidates; k++) {
+        if (this->check_collision_except_monomer(candidate_positions[k].data(), real_monomer_index)) {
+            w[k] = 0.0;
+        } else {
+            all_overlap = false; // 至少有一个位置不重叠
+            // 计算外势玻尔兹曼因子
+            w[k] = this->Vext_bz(candidate_positions[k].data());
+        }
+    }
+
+    if (all_overlap) {
+        return; // 所有候选位置都重叠，旋转失败
+    }
+
+    // 使用 bias 采样判断是否接受（旧权重为当前单体的外势玻尔兹曼因子）
+    double old_weight = this->Vext_bz(this->r_total[now_monomer]);
+    if (acc_bias_or_not(w.data(), old_weight, this->k_max, this->gen)) {
+        this->acc_rot++;
+        // 从新位置中选择一个（使用前 k_max 个位置和权重）
+        int select_index = RouteWheel(w.data(), this->k_max, this->gen);
+
+        // 直接更新位置
+        this->r_total[real_monomer_index][0] = candidate_positions[select_index][0];
+        this->r_total[real_monomer_index][1] = candidate_positions[select_index][1];
+        this->r_total[real_monomer_index][2] = candidate_positions[select_index][2];
+
+        // 可选的距离检查（默认关闭）
+        if (ENABLE_DISTANCE_CHECK) {
+            double dx_prev = this->r_total[real_monomer_index][0] - r_prev[0];
+            double dy_prev = this->r_total[real_monomer_index][1] - r_prev[1];
+            double dz_prev = this->r_total[real_monomer_index][2] - r_prev[2];
+            double dist2_prev = dx_prev*dx_prev + dy_prev*dy_prev + dz_prev*dz_prev;
+
+            double dx_next = this->r_total[real_monomer_index][0] - r_next[0];
+            double dy_next = this->r_total[real_monomer_index][1] - r_next[1];
+            double dz_next = this->r_total[real_monomer_index][2] - r_next[2];
+            double dist2_next = dx_next*dx_next + dy_next*dy_next + dz_next*dz_next;
+
+            if (dist2_prev < MIN_ALLOWED_SQ || dist2_prev > MAX_ALLOWED_SQ ||
+                dist2_next < MIN_ALLOWED_SQ || dist2_next > MAX_ALLOWED_SQ) {
+                std::cerr << "WARNING: Invalid bond length after rotation move." << std::endl;
+                std::cerr << "  monomer_index: " << monomer_index << ", polymer_index: " << polymer_index << std::endl;
+                std::cerr << "  dist2_prev: " << dist2_prev << " (" << sqrt(dist2_prev) << ")" << std::endl;
+                std::cerr << "  dist2_next: " << dist2_next << " (" << sqrt(dist2_next) << ")" << std::endl;
+                std::cerr << "  r_prev: [" << r_prev[0] << ", " << r_prev[1] << ", " << r_prev[2] << "]" << std::endl;
+                std::cerr << "  r_next: [" << r_next[0] << ", " << r_next[1] << ", " << r_next[2] << "]" << std::endl;
+                std::cerr << "  new_pos: [" << this->r_total[real_monomer_index][0] << ", "
+                          << this->r_total[real_monomer_index][1] << ", "
+                          << this->r_total[real_monomer_index][2] << "]" << std::endl;
+            }
+        }
+
+        // 更新格子列表（如果需要）
+        if (this->MN_now > this->cl_threshold) {
+            this->build_cell_list();
+        }
+    }
+}
+/*
 void MuVT_MC_LinearPolymer::rot_mid_move(int monomer_index ,int polymer_index)
 {
     // std::cout << "rot_mid_move start" << std::endl;
@@ -822,7 +1085,7 @@ void MuVT_MC_LinearPolymer::rot_mid_move(int monomer_index ,int polymer_index)
     
     // std::cout << "rot_mid_move end" << std::endl;
 }
-
+*/
 // ======================================================================
 // 移动操作方法（插入和删除）
 // ======================================================================

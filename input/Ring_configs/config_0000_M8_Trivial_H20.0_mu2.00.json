@@ -19,7 +19,7 @@
         "K_MAX": 10,
         "sample_interval": 5,
         "sample_time": 40000,
-        "sample_block": 10,
+        "sample_block": 1,
         "dz": 0.02
     },
     "Vext_params": {

@@ -178,6 +178,7 @@ void MuVT_MC_RingPolymer::insert_move(int k_max)
     return;
 }
 
+
 bool MuVT_MC_RingPolymer::insert_one_monomer(std::vector<std::array<double, 3>> &r_new, double *Z_eff, int monomer_index, int k_max)
 {
     // monomer_index 正在生长的位置
@@ -311,6 +312,65 @@ bool MuVT_MC_RingPolymer::insert_one_monomer(std::vector<std::array<double, 3>> 
 
         *Z_eff *= sum_z_eff / k_max / P_road[select]; // 归一化，除以k_max
         return true;
+    }
+}
+
+void MuVT_MC_RingPolymer::delete_move(int k_max, int delete_polymer_index)
+{
+    this->num_delete++;
+
+    int delete_first_monomer_index = delete_polymer_index * this->M;
+    int last_polymer_start = this->MN_now - this->M;
+
+    // 2. 交换指针，把要删除的聚合物链放到最后面
+    for (int monomer_index = 0; monomer_index < this->M; monomer_index++)
+    {
+        std::swap(this->r_total[delete_first_monomer_index + monomer_index], this->r_total[last_polymer_start + monomer_index]);
+    }
+
+    // 3. 保存要删除的聚合物的位置
+    std::vector<std::array<double, 3>> r_delete(this->M);
+    for (int i = 0; i < this->M; i++)
+    {
+        for (int j = 0; j < 3; ++j)
+        {
+            r_delete[i][j] = this->r_total[last_polymer_start + i][j];
+        }
+    }
+    int original_MN_now = this->MN_now;
+    this->MN_now -= this->M;
+    this->N_now -= 1;
+    // 4. 更新cell列表，因为粒子位置已经改变
+    if (this->MN_now > this->cl_threshold)
+    {
+        this->build_cell_list();
+    }
+
+    // 5. 先假设聚合物被删除
+
+
+    // 6. 使用delete_one_monomer方法计算每个单体的权重
+    double Z_eff = 1.0;
+    for (int monomer_index = 0; monomer_index < this->M; monomer_index++)
+    {
+        this->delete_one_monomer(r_delete, &Z_eff, monomer_index, k_max);
+    }
+
+    // 7. 计算接受概率
+    double acc_ratio = 1.0 / (Z_eff * this->exp_mu_b) * (this->N_now + 1) / this->V;
+    // 8. 决定是否接受删除
+    if (acc_ratio > uni_dis(this->gen))
+    {
+        this->acc_delete++;
+    }
+    else
+    {
+        this->MN_now += M;
+        this->N_now += 1;
+        if (this->MN_now > this->cl_threshold)
+        {
+            this->build_cell_list();
+        }
     }
 }
 
@@ -465,64 +525,6 @@ double MuVT_MC_RingPolymer::get_G_insert_ring(double insert_z, int k_max) // 不
 }
 
 // 删除移动：环状聚合物的删除逻辑
-void MuVT_MC_RingPolymer::delete_move(int k_max, int delete_polymer_index)
-{
-    this->num_delete++;
-
-    int delete_first_monomer_index = delete_polymer_index * this->M;
-    int last_polymer_start = this->MN_now - this->M;
-
-    // 2. 交换指针，把要删除的聚合物链放到最后面
-    for (int monomer_index = 0; monomer_index < this->M; monomer_index++)
-    {
-        std::swap(this->r_total[delete_first_monomer_index + monomer_index], this->r_total[last_polymer_start + monomer_index]);
-    }
-
-    // 3. 保存要删除的聚合物的位置
-    std::vector<std::array<double, 3>> r_delete(this->M);
-    for (int i = 0; i < this->M; i++)
-    {
-        for (int j = 0; j < 3; ++j)
-        {
-            r_delete[i][j] = this->r_total[last_polymer_start + i][j];
-        }
-    }
-    int original_MN_now = this->MN_now;
-    this->MN_now -= this->M;
-    this->N_now -= 1;
-    // 4. 更新cell列表，因为粒子位置已经改变
-    if (this->MN_now > this->cl_threshold)
-    {
-        this->build_cell_list();
-    }
-
-    // 5. 先假设聚合物被删除
-
-
-    // 6. 使用delete_one_monomer方法计算每个单体的权重
-    double Z_eff = 1.0;
-    for (int monomer_index = 0; monomer_index < this->M; monomer_index++)
-    {
-        this->delete_one_monomer(r_delete, &Z_eff, monomer_index, k_max);
-    }
-
-    // 7. 计算接受概率
-    double acc_ratio = 1.0 / (Z_eff * this->exp_mu_b) * (this->N_now + 1) / this->V;
-    // 8. 决定是否接受删除
-    if (acc_ratio > uni_dis(this->gen))
-    {
-        this->acc_delete++;
-    }
-    else
-    {
-        this->MN_now += M;
-        this->N_now += 1;
-        if (this->MN_now > this->cl_threshold)
-        {
-            this->build_cell_list();
-        }
-    }
-}
 
 bool MuVT_MC_RingPolymer::insert_recursive_ring(
     int next_idx, int parent_idx,

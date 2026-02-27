@@ -17,7 +17,10 @@
       "Bash(cmd:*)",
       "Bash(cd D:\\\\Desktop\\\\NewMuVTPolymer:*)",
       "Bash(head:*)",
-      "Bash(tail:*)"
+      "Bash(tail:*)",
+      "Bash(mkdir:*)",
+      "Bash(./test_temp/build/Release/test_bulk_density.exe:*)",
+      "Bash(cmake:*)"
     ]
   }
 }

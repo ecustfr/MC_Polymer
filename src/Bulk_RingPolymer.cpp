@@ -34,7 +34,7 @@ Bulk_RingPolymer::Bulk_RingPolymer(std::string configuration, int M, int init_N,
     
     this->build_cell_list();
     this->reset_mc_record();
-    this->set_sim_parameters(0.1, 0.3, 10); // 默认参数
+    this->set_sim_parameters(0.1, 0.3, 5); // 默认参数
     
     std::cout << "Bulk Ring Polymer System constructed" << std::endl;
 }
@@ -212,6 +212,17 @@ void Bulk_RingPolymer::set_sim_parameters(double EPS_TRANS, double ROT_RATIO, in
     this->eps_trans = EPS_TRANS;
     this->rot_ratio = ROT_RATIO;
     this->k_max = K_MAX;
+
+    // 预分配旋转移动缓存
+    int total_candidates = 2 * this->k_max - 1;
+    this->rot_mid_cache_data.resize(total_candidates);
+    this->rot_mid_cache_ptrs.resize(total_candidates);
+    this->rot_mid_cache_weights.resize(total_candidates);
+
+    // 设置指针数组
+    for (int i = 0; i < total_candidates; i++) {
+        this->rot_mid_cache_ptrs[i] = this->rot_mid_cache_data[i].data();
+    }
 }
 
 // 打印所有参数
@@ -301,9 +312,10 @@ bool Bulk_RingPolymer::check_collision_except_polymer(const double* r_try, int i
         for (int dy = -1; dy <= 1; dy++) {
             for (int dx = -1; dx <= 1; dx++) {
                 // 计算实际格子索引，考虑周期性
-                int real_cx = (cx + dx + this->cell_num[0]) % this->cell_num[0];
-                int real_cy = (cy + dy + this->cell_num[1]) % this->cell_num[1];
-                int real_cz = (cz + dz + this->cell_num[2]) % this->cell_num[2];
+                
+                int real_cx = ((cx+dx)%this->cell_num[0] + this->cell_num[0]) % this->cell_num[0]; 
+                int real_cy = ((cy+dy)%this->cell_num[1] + this->cell_num[1]) % this->cell_num[1];
+                int real_cz = ((cz+dz)%this->cell_num[2] + this->cell_num[2]) % this->cell_num[2];
                 
                 int cell_idx = real_cx + real_cy * this->cell_num[0] + real_cz * this->cell_num[0] * this->cell_num[1];
                 
@@ -404,103 +416,100 @@ void Bulk_RingPolymer::trans_move(int polymer_index) {
 void Bulk_RingPolymer::rot_mid_move(int monomer_index, int polymer_index) {
     this->num_rot++;
     int real_monomer_index = polymer_index * this->M + monomer_index;
-    
+
+    // 距离检查配置（默认关闭以优化性能）
+    constexpr bool ENABLE_DISTANCE_CHECK = false;
+    constexpr double MIN_ALLOWED = 1.0 - 0.001;
+    constexpr double MAX_ALLOWED = 1.0 + 0.001;
+    constexpr double MIN_ALLOWED_SQ = MIN_ALLOWED * MIN_ALLOWED;
+    constexpr double MAX_ALLOWED_SQ = MAX_ALLOWED * MAX_ALLOWED;
+
     // 获取前后单体位置
     double r_prev[3];
     double r_next[3];
-    
+
     int last_monomer = polymer_index * this->M + this->topology_map[monomer_index][0];
     int next_monomer = polymer_index * this->M + this->topology_map[monomer_index][1];
-    
-    for (int j = 0; j < 3; j++) {
-        r_prev[j] = this->r_total[last_monomer][j];
-        r_next[j] = this->r_total[next_monomer][j];
+
+    // 直接复制位置，避免循环开销
+    r_prev[0] = this->r_total[last_monomer][0];
+    r_prev[1] = this->r_total[last_monomer][1];
+    r_prev[2] = this->r_total[last_monomer][2];
+    r_next[0] = this->r_total[next_monomer][0];
+    r_next[1] = this->r_total[next_monomer][1];
+    r_next[2] = this->r_total[next_monomer][2];
+
+    // 使用预分配的缓存
+    int total_candidates = 2 * this->k_max - 1;
+
+    // 一次性生成所有候选位置
+    if (!this->Find_Last(r_prev, r_next, this->rot_mid_cache_ptrs.data(), total_candidates)) {
+        throw std::runtime_error("Find_Last failed in rot_mid_move.");
     }
-    
-    // 生成候选位置
-    std::vector<std::array<double, 3>> r_temp_new_data(this->k_max);
-    std::vector<std::array<double, 3>> r_temp_old_data(this->k_max - 1);
-    
-    // 创建指针数组
-    std::vector<double*> r_temp_new_ptrs(this->k_max);
-    std::vector<double*> r_temp_old_ptrs(this->k_max - 1);
-    for (int i = 0; i < this->k_max; i++) {
-        r_temp_new_ptrs[i] = r_temp_new_data[i].data();
-    }
-    for (int i = 0; i < this->k_max - 1; i++) {
-        r_temp_old_ptrs[i] = r_temp_old_data[i].data();
-    }
-    
-    // 生成候选位置
-    this->Find_Last(r_prev, r_next, r_temp_new_ptrs.data(), this->k_max);
-    this->Find_Last(r_prev, r_next, r_temp_old_ptrs.data(), this->k_max - 1);
-    
-    // 合并候选位置：前k_max个为新位置，后k_max-1个为旧位置
-    std::vector<std::array<double, 3>> r_temp(2 * this->k_max - 1);
-    for (int k = 0; k < this->k_max; k++) {
-        r_temp[k] = r_temp_new_data[k];
-    }
-    for (int k = 0; k < this->k_max - 1; k++) {
-        r_temp[k + this->k_max] = r_temp_old_data[k];
-    }
-    
-    // 计算权重
-    std::vector<double> w(2 * this->k_max - 1, 1.0);
-    for (int k = 0; k < 2 * this->k_max - 1; k++) {
-        // 检查碰撞，仅排除当前正在旋转的单体
-        if (this->check_collision_except_monomer(r_temp[k].data(), real_monomer_index)) {
-            w[k] = 0.0;
+
+    // 计算权重 w = exp(-\beta u)，如果不重叠则为1.0（体相系统无外势），重叠则为0
+    // 直接使用缓存权重数组
+    std::fill(this->rot_mid_cache_weights.begin(), this->rot_mid_cache_weights.end(), 1.0);
+
+    // 检查碰撞并更新权重
+    bool all_overlap = true;
+    for (int k = 0; k < total_candidates; k++) {
+        if (!this->check_collision_except_monomer(this->rot_mid_cache_data[k].data(), real_monomer_index)) {
+            all_overlap = false;  // 至少有一个位置不重叠
+        } else {
+            this->rot_mid_cache_weights[k] = 0.0;
         }
     }
-    
-    // 检查是否所有位置都重叠
-    if (std::all_of(w.begin(), w.end(), [](double v) { return v == 0.0; })) {
+
+    if (all_overlap) {
         return; // 所有候选位置都重叠，旋转失败
     }
-    
-    // 轮盘赌选择
-    double sum_w = 0.0;
-    for (double weight : w) {
-        sum_w += weight;
-    }
-    
-    double rand_val = this->uni_dis(this->gen) * sum_w;
-    double current_sum = 0.0;
-    int select_index = -1;
-    
-    for (int k = 0; k < 2 * this->k_max - 1; k++) {
-        current_sum += w[k];
-        if (current_sum >= rand_val) {
-            select_index = k;
-            break;
-        }
-    }
-    
-    // 更新位置
-    if (select_index < this->k_max) {
-        // 接受新位置
+
+    // 使用 bias 采样判断是否接受（旧权重为1，因为当前是等概率采样）
+    // 体相系统无外势，旧位置权重为1.0
+    double old_weight = 1.0;
+    if (acc_bias_or_not(this->rot_mid_cache_weights.data(), old_weight, this->k_max, this->gen)) {
         this->acc_rot++;
-        for (int j = 0; j < 3; j++) {
-            this->r_total[real_monomer_index][j] = r_temp[select_index][j];
+        // 从新位置中选择一个（使用前 k_max 个位置和权重）
+        int select_index = RouteWheel(this->rot_mid_cache_weights.data(), this->k_max, this->gen);
+
+        // 直接更新位置
+        this->r_total[real_monomer_index][0] = this->rot_mid_cache_data[select_index][0];
+        this->r_total[real_monomer_index][1] = this->rot_mid_cache_data[select_index][1];
+        this->r_total[real_monomer_index][2] = this->rot_mid_cache_data[select_index][2];
+
+        // 可选的距离检查（默认关闭）
+        if (ENABLE_DISTANCE_CHECK) {
+            double dx_prev = this->r_total[real_monomer_index][0] - r_prev[0];
+            double dy_prev = this->r_total[real_monomer_index][1] - r_prev[1];
+            double dz_prev = this->r_total[real_monomer_index][2] - r_prev[2];
+            double dist2_prev = dx_prev*dx_prev + dy_prev*dy_prev + dz_prev*dz_prev;
+
+            double dx_next = this->r_total[real_monomer_index][0] - r_next[0];
+            double dy_next = this->r_total[real_monomer_index][1] - r_next[1];
+            double dz_next = this->r_total[real_monomer_index][2] - r_next[2];
+            double dist2_next = dx_next*dx_next + dy_next*dy_next + dz_next*dz_next;
+
+            if (dist2_prev < MIN_ALLOWED_SQ || dist2_prev > MAX_ALLOWED_SQ ||
+                dist2_next < MIN_ALLOWED_SQ || dist2_next > MAX_ALLOWED_SQ) {
+                std::cerr << "WARNING: Invalid bond length after rotation move." << std::endl;
+                std::cerr << "  monomer_index: " << monomer_index << ", polymer_index: " << polymer_index << std::endl;
+                std::cerr << "  dist2_prev: " << dist2_prev << " (" << sqrt(dist2_prev) << ")" << std::endl;
+                std::cerr << "  dist2_next: " << dist2_next << " (" << sqrt(dist2_next) << ")" << std::endl;
+            }
         }
-        
-        // 更新格子列表
-        this->build_cell_list();
+
+        // 更新格子列表（如果需要）
+        if (this->MN_now > this->cl_threshold) {
+            this->build_cell_list();
+        }
     }
 }
 
 void Bulk_RingPolymer::rot_polymer_move(int polymer_index) {
-    // 决定哪些单体需要旋转
-    std::vector<bool> rot_list(this->M, false);
+    // 对每个单体独立决定是否旋转，避免额外的vector分配
     for (int i = 0; i < this->M; i++) {
         if (this->uni_dis(this->gen) < this->rot_ratio) {
-            rot_list[i] = true;
-        }
-    }
-    
-    // 对选定的单体进行旋转
-    for (int i = 0; i < this->M; i++) {
-        if (rot_list[i]) {
             // 环状聚合物没有端点，所有单体都是中间单体
             this->rot_mid_move(i, polymer_index);
         }
@@ -511,7 +520,7 @@ void Bulk_RingPolymer::rot_polymer_move(int polymer_index) {
 void Bulk_RingPolymer::mc_one_step() {
     // 对每个聚合物进行平移和旋转
     for (int polymer_index = 0; polymer_index < this->N_now; polymer_index++) {
-        this->trans_move(polymer_index);
+        // this->trans_move(polymer_index);
         this->rot_polymer_move(polymer_index);
     }
 }
@@ -565,9 +574,9 @@ bool Bulk_RingPolymer::check_collision_except_monomer(const double* r_try, int i
         for (int dy = -1; dy <= 1; dy++) {
             for (int dx = -1; dx <= 1; dx++) {
                 // 计算实际格子索引，考虑周期性
-                int real_cx = (cx + dx + this->cell_num[0]) % this->cell_num[0];
-                int real_cy = (cy + dy + this->cell_num[1]) % this->cell_num[1];
-                int real_cz = (cz + dz + this->cell_num[2]) % this->cell_num[2];
+                int real_cx = ((cx+dx)%this->cell_num[0] + this->cell_num[0]) % this->cell_num[0]; 
+                int real_cy = ((cy+dy)%this->cell_num[1] + this->cell_num[1]) % this->cell_num[1];
+                int real_cz = ((cz+dz)%this->cell_num[2] + this->cell_num[2]) % this->cell_num[2];
                 
                 int cell_idx = real_cx + real_cy * this->cell_num[0] + real_cz * this->cell_num[0] * this->cell_num[1];
                 
@@ -641,64 +650,156 @@ void Bulk_RingPolymer::Rot_temp(double* vec, double** r_temp_rot, int k_max) {
     }
 }
 
-void Bulk_RingPolymer::Find_Last(double* r1, double* r2, double** r_temp_rot, int k_max) {
-    // 生成k_max个随机角度
-    std::vector<double> temp_theta(k_max);
-    for (int i = 0; i < k_max; i++) {
-        temp_theta[i] = 2 * M_PI * this->uni_dis(this->gen);
-    }
-    
-    // 计算中间点和距离
-    double temp = diameter2 - this->dis2_no_period(r1, r2) / 4.0;
-    
-    double mid_r[3] = {0.0};
-    for (int i = 0; i < 3; i++) {
-        mid_r[i] = (r1[i] + r2[i]) / 2;
-    }
-    
-    // 检查是否可以生成候选位置
-    if (temp <= 0) {
-        // 无法生成候选位置，返回中间点
-        for (int k = 0; k < k_max; k++) {
-            for (int j = 0; j < 3; j++) {
-                r_temp_rot[k][j] = mid_r[j];
-            }
+bool Bulk_RingPolymer::Find_Last(double* r1, double* r2, double** r_temp_rot, int k_max) {
+    // 计算向量 v = r2 - r1 和中间点 M
+    double v[3] = {r2[0] - r1[0], r2[1] - r1[1], r2[2] - r1[2]};
+    double d2 = v[0]*v[0] + v[1]*v[1] + v[2]*v[2]; // |v|^2
+
+    // 提前检查：如果 d2 > 4.0，则 d > 2.0，无法生成候选位置
+    if (d2 > 4.0) {
+        double M[3] = {(r1[0] + r2[0]) / 2, (r1[1] + r2[1]) / 2, (r1[2] + r2[2]) / 2};
+        for (int i = 0; i < k_max; i++) {
+            r_temp_rot[i][0] = M[0];
+            r_temp_rot[i][1] = M[1];
+            r_temp_rot[i][2] = M[2];
         }
-        return;
+        return false;
     }
-    
-    // 生成候选位置
-    double R = sqrt(temp);
-    for (int i = 0; i < k_max; i++) {
-        r_temp_rot[i][0] = R * cos(temp_theta[i]);
-        r_temp_rot[i][1] = R * sin(temp_theta[i]);
-        r_temp_rot[i][2] = 0.0; // 初始z方向为0
+
+    double d = sqrt(d2);
+    double M[3] = {(r1[0] + r2[0]) / 2, (r1[1] + r2[1]) / 2, (r1[2] + r2[2]) / 2};
+
+    // 处理 d 过小的情况（r1 和 r2 几乎重合）
+    const double EPSILON = 1e-12;
+    if (d < EPSILON) {
+        // 无法定义正交平面，返回中点
+        for (int i = 0; i < k_max; i++) {
+            r_temp_rot[i][0] = M[0];
+            r_temp_rot[i][1] = M[1];
+            r_temp_rot[i][2] = M[2];
+        }
+        return false;
     }
-    
-    // 计算旋转向量
-    double vec[3] = {r2[0] - r1[0], r2[1] - r1[1], r2[2] - r1[2]};
-    double vec_length = sqrt(this->dis2_no_period(vec, vec));
-    
-    // 归一化向量
-    if (vec[0] >= 0) {
-        vec[0] /= vec_length;
-        vec[1] /= vec_length;
-        vec[2] /= vec_length;
+
+    // 计算半径 R = sqrt(diameter^2 - (d/2)^2)
+    double R_sq = diameter2 - d2 / 4.0;
+    double R = sqrt(R_sq);
+
+    // 生成两个正交的单位向量 u, w 垂直于 v
+    double u[3], w[3];
+
+    // 方法：选择一个与 v 不正交的临时向量，通过叉积获得正交基
+    // 避免数值问题：选择 v 中绝对值最大的分量
+    double abs_x = fabs(v[0]), abs_y = fabs(v[1]), abs_z = fabs(v[2]);
+
+    if (abs_x > abs_y) {
+        if (abs_x > abs_z) {
+            // v 主要沿 x 方向，使用 (0, 1, 0) 作为临时向量
+            u[0] = 0.0; u[1] = 1.0; u[2] = 0.0;
+        } else {
+            // v 主要沿 z 方向，使用 (1, 0, 0) 作为临时向量
+            u[0] = 1.0; u[1] = 0.0; u[2] = 0.0;
+        }
     } else {
-        vec[0] /= -vec_length;
-        vec[1] /= -vec_length;
-        vec[2] /= -vec_length;
-    }
-    
-    // 旋转候选位置
-    this->Rot_temp(vec, r_temp_rot, k_max);
-    
-    // 平移到中间点
-    for (int i = 0; i < k_max; i++) {
-        for (int j = 0; j < 3; j++) {
-            r_temp_rot[i][j] += mid_r[j];
+        if (abs_y > abs_z) {
+            // v 主要沿 y 方向，使用 (0, 0, 1) 作为临时向量
+            u[0] = 0.0; u[1] = 0.0; u[2] = 1.0;
+        } else {
+            // v 主要沿 z 方向，使用 (1, 0, 0) 作为临时向量
+            u[0] = 1.0; u[1] = 0.0; u[2] = 0.0;
         }
     }
+
+    // 计算 w = v × u
+    w[0] = v[1]*u[2] - v[2]*u[1];
+    w[1] = v[2]*u[0] - v[0]*u[2];
+    w[2] = v[0]*u[1] - v[1]*u[0];
+
+    // 归一化 w
+    double w_len_sq = w[0]*w[0] + w[1]*w[1] + w[2]*w[2];
+    double w_len = sqrt(w_len_sq);
+
+    if (w_len < 1e-12) {
+        // 如果 v 与 u 平行，尝试另一个 u
+        u[0] = 1.0; u[1] = 0.0; u[2] = 0.0;
+        w[0] = v[1]*u[2] - v[2]*u[1];
+        w[1] = v[2]*u[0] - v[0]*u[2];
+        w[2] = v[0]*u[1] - v[1]*u[0];
+        w_len_sq = w[0]*w[0] + w[1]*w[1] + w[2]*w[2];
+        w_len = sqrt(w_len_sq);
+    }
+
+    // 归一化 w：w_unit = w / w_len
+    double inv_w_len = 1.0 / w_len;
+    w[0] *= inv_w_len; w[1] *= inv_w_len; w[2] *= inv_w_len;
+
+    // 计算 u = w × v (确保正交右手系)
+    // 注意：|w × v| = |w| * |v| * sin(90°) = 1 * d * 1 = d
+    u[0] = w[1]*v[2] - w[2]*v[1];
+    u[1] = w[2]*v[0] - w[0]*v[2];
+    u[2] = w[0]*v[1] - w[1]*v[0];
+
+    // 归一化 u：u_unit = u / d（因为 |u| = d）
+    double inv_d = 1.0 / d;
+    u[0] *= inv_d; u[1] *= inv_d; u[2] *= inv_d;
+
+    // 预计算常数
+    const double TWO_PI = 2.0 * M_PI;
+
+    // 生成 k_max 个随机角度的候选位置
+    // 使用局部变量减少数组索引开销
+    double Mx = M[0], My = M[1], Mz = M[2];
+    double ux = u[0], uy = u[1], uz = u[2];
+    double wx = w[0], wy = w[1], wz = w[2];
+
+    for (int i = 0; i < k_max; i++) {
+        double theta = TWO_PI * this->uni_dis(this->gen);
+        double cos_theta, sin_theta;
+        // 使用 sincos 同时计算正弦和余弦（如果编译器支持）
+        // 否则回退到单独的 cos 和 sin
+#ifdef _GNU_SOURCE
+        sincos(theta, &sin_theta, &cos_theta);
+#else
+        cos_theta = cos(theta);
+        sin_theta = sin(theta);
+#endif
+
+        // 位置公式: B = M + R * (cosθ * u + sinθ * w)
+        // 展开计算以减少临时变量
+        double term_x = cos_theta * ux + sin_theta * wx;
+        double term_y = cos_theta * uy + sin_theta * wy;
+        double term_z = cos_theta * uz + sin_theta * wz;
+
+        r_temp_rot[i][0] = Mx + R * term_x;
+        r_temp_rot[i][1] = My + R * term_y;
+        r_temp_rot[i][2] = Mz + R * term_z;
+    }
+
+    // 调试验证：检查第一个候选位置到 r1 和 r2 的距离（仅在调试时启用）
+    bool debug_check = false;
+    if (debug_check && k_max > 0) {
+        double* B = r_temp_rot[0];
+        double dx1 = B[0] - r1[0], dy1 = B[1] - r1[1], dz1 = B[2] - r1[2];
+        double dx2 = B[0] - r2[0], dy2 = B[1] - r2[1], dz2 = B[2] - r2[2];
+        double dist1_sq = dx1*dx1 + dy1*dy1 + dz1*dz1;
+        double dist2_sq = dx2*dx2 + dy2*dy2 + dz2*dz2;
+        double dist1 = sqrt(dist1_sq);
+        double dist2 = sqrt(dist2_sq);
+
+        if (fabs(dist1 - 1.0) > 0.001 || fabs(dist2 - 1.0) > 0.001 || fabs(dist1 - dist2) > 0.001) {
+            std::cout << "DEBUG Find_Last validation failed:" << std::endl;
+            std::cout << "  d = " << d << ", R = " << R << std::endl;
+            std::cout << "  dist to r1 = " << dist1 << ", dist to r2 = " << dist2 << std::endl;
+            std::cout << "  difference = " << fabs(dist1 - dist2) << std::endl;
+            std::cout << "  v = [" << v[0] << ", " << v[1] << ", " << v[2] << "]" << std::endl;
+            std::cout << "  u = [" << ux << ", " << uy << ", " << uz << "]" << std::endl;
+            std::cout << "  w = [" << wx << ", " << wy << ", " << wz << "]" << std::endl;
+            std::cout << "  M = [" << Mx << ", " << My << ", " << Mz << "]" << std::endl;
+            std::cout << "  B = [" << B[0] << ", " << B[1] << ", " << B[2] << "]" << std::endl;
+        }
+    }
+
+    return true;
 }
 
 // 体积缩放并检查重叠
@@ -885,29 +986,74 @@ double Bulk_RingPolymer::calculate_insertion_weight(int k_max) {
     return insertion_weight;
 }
 
+double Bulk_RingPolymer::get_W_insert_ring(int k_max)
+{
+    // 1. 初始化新聚合物的位置
+    std::vector<std::array<double, 3>> r_new(this->M);
+    double Z_eff = 1.0;
+
+    // 2. 插入每个单体，使用环状聚合物的 insert_one_monomer 方法
+    for (int monomer_index = 0; monomer_index < this->M; monomer_index++)
+    {
+        if (!this->insert_one_monomer(r_new, &Z_eff, monomer_index, k_max))
+        {
+            return 0.0; // 单体插入失败，返回 0
+        }
+    }
+
+    // 3. 返回计算得到的权重
+    return Z_eff;
+}
+
+double Bulk_RingPolymer::get_W_insert_ring_z(double z, int k_max)
+{
+    std::vector<std::array<double, 3>> r_new(this->M);
+    double Z_eff = 1.0;
+
+    // 放置种子节点（第一个单体）
+    for (int d = 0; d < 2; ++d)
+    {
+        r_new[0][d] = this->box_size[d] * this->uni_dis(this->gen);
+    }
+    r_new[0][2] = z;
+
+    // 检查种子节点是否与其他聚合物重叠
+    if (this->overlap_all_other_polymer(r_new[0].data()))
+    {
+        return 0.0; // 种子节点重叠，插入失败
+    }
+
+    // 插入剩余的单体（从索引1到M-1）
+    for (int monomer_index = 1; monomer_index < this->M; monomer_index++)
+    {
+        if (!this->insert_one_monomer(r_new, &Z_eff, monomer_index, k_max))
+        {
+            return 0.0; // 单体插入失败，返回 0
+        }
+    }
+
+    return Z_eff;
+}
+
 // ======================================================================
 // 巨正则系综模拟方法
 // ======================================================================
 
 // 巨正则单步模拟
 void Bulk_RingPolymer::mc_one_step_MuVT() {
+    this->mc_one_step();
     this->insert_move(this->k_max);
-    int delete_N = static_cast<int>(this->N_now * this->uni_dis(this->gen));
+     int delete_N = static_cast<int>(this->N_now * this->uni_dis(this->gen));
     this->delete_move(this->k_max, delete_N);
 }
 
 // 巨正则多步模拟
 void Bulk_RingPolymer::run_simulation_MuVT(int steps) {
-    std::cout << "Running MuVT simulation for " << steps << " steps..." << std::endl;
+    
     for (int step = 0; step < steps; step++) {
         this->mc_one_step_MuVT();
-
-        // 每1000步打印一次状态
-        if (step % 1000 == 0) {
-            std::cout << "Step " << step << ", N_now = " << this->N_now << ", MN_now = " << this->MN_now << std::endl;
-        }
     }
-    std::cout << "MuVT simulation completed." << std::endl;
+    
 }
 
 // ======================================================================
@@ -948,6 +1094,7 @@ void Bulk_RingPolymer::insert_move(int k_max)
         }
         this->MN_now += this->M;
         this->N_now++;
+        this->rho_now = static_cast<double>(this->MN_now) / (this->box_size[0] * this->box_size[1] * this->box_size[2]);
 
         // 更新cell列表
         if (this->MN_now > this->cl_threshold)
@@ -988,6 +1135,7 @@ void Bulk_RingPolymer::delete_move(int k_max, int delete_polymer_index)
     int original_MN_now = this->MN_now;
     this->MN_now -= this->M;
     this->N_now -= 1;
+    this->rho_now = static_cast<double>(this->MN_now) / (this->box_size[0] * this->box_size[1] * this->box_size[2]);
     // 4. 更新cell列表，因为粒子位置已经改变
     if (this->MN_now > this->cl_threshold)
     {
@@ -1014,6 +1162,7 @@ void Bulk_RingPolymer::delete_move(int k_max, int delete_polymer_index)
     {
         this->MN_now += M;
         this->N_now += 1;
+        this->rho_now = static_cast<double>(this->MN_now) / (this->box_size[0] * this->box_size[1] * this->box_size[2]);
         if (this->MN_now > this->cl_threshold)
         {
             this->build_cell_list();
@@ -1066,7 +1215,11 @@ bool Bulk_RingPolymer::insert_one_monomer(std::vector<std::array<double, 3>> &r_
         }
         // 计算从倒数第二个单体到第一个单体的方向向量
         // 使用 Find_Last 方法生成候选位置
-        this->Find_Last(r_new[this->M-2].data(), r_new[0].data(), candidate_ptrs.data(), k_max);
+        if (!this->Find_Last(r_new[this->M-2].data(), r_new[0].data(), candidate_ptrs.data(), k_max)) {
+            // Find_Last失败，无法生成候选位置
+            *Z_eff = 0;
+            return false;
+        }
 
         // 检查重叠并计算权重
         for (int k = 0; k < k_max; k++)
@@ -1194,7 +1347,14 @@ void Bulk_RingPolymer::delete_one_monomer(std::vector<std::array<double, 3>> &r_
             candidate_ptrs[k] = candidate_positions[k].data();
         }
         // 使用Find_Last生成可能的最后一个单体位置（与第一个单体连接）
-        this->Find_Last(r_delete[this->M-2].data(), r_delete[0].data(), candidate_ptrs.data(), k_max-1);
+        if (!this->Find_Last(r_delete[this->M-2].data(), r_delete[0].data(), candidate_ptrs.data(), k_max-1)) {
+            // Find_Last失败，将所有候选位置权重设为0
+            for (int k = 0; k < k_max - 1; k++) {
+                z_eff[k] = 0.0;
+            }
+            // 原来的位置权重保持为1.0
+            z_eff[k_max-1] = 1.0;
+        }
         for( int k = 0; k < k_max - 1; k++)
         {
             // 体相系统无外势，权重初始为1.0
@@ -1219,11 +1379,7 @@ void Bulk_RingPolymer::delete_one_monomer(std::vector<std::array<double, 3>> &r_
     else // for middle monomer
     {
         // 构建已插入单体的索引列表
-        std::vector<int> cal_index;
-        for (int j = 0; j < monomer_index; j++)
-        {
-            cal_index.push_back(j);
-        }
+
         for (int k = 0; k < k_max - 1; k++)
         {
             // 从前一个单体位置开始

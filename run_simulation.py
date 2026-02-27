@@ -399,7 +399,26 @@ def run_simulation(config):
         f.write(f"rcut: {input_params['rcut']:.6f}\n")
         f.write(f"max_N: {input_params['max_N']}\n")
     print(f"Simulation configuration saved to {output_params['output_dir']}/config.dat")
-    
+
+    # 保存最后一帧所有聚合物坐标
+    try:
+        # 获取坐标数组和单体总数
+        positions = mc_sys.r_total  # 形状为 (MN_now, 3) 的numpy数组
+        MN_now = mc_sys.get_MN_now()
+
+        # 构建输出文件名
+        coords_file = os.path.join(output_params['output_dir'], f"{output_params['output_prefix']}_final_coordinates.dat")
+
+        # 保存坐标，每行x y z（无头信息）
+        with open(coords_file, 'w') as f:
+            for i in range(MN_now):
+                f.write(f"{positions[i, 0]:.8f} {positions[i, 1]:.8f} {positions[i, 2]:.8f}\n")
+
+        print(f"最终聚合物坐标已保存到: {coords_file}")
+        print(f"单体总数: {MN_now}")
+    except Exception as e:
+        print(f"警告: 保存最终坐标时出错: {e}")
+
     print("\nSimulation completed!")
     print(f"Output files saved in: {output_params['output_dir']}")
     

@@ -43,6 +43,8 @@ public:
     
     // 插入高分子并计算插入权重
     double calculate_insertion_weight(int k_max);
+    double get_W_insert_ring(int k_max);
+    double get_W_insert_ring_z(double z, int k_max);
 
     // 巨正则模拟方法
     void mc_one_step_MuVT();                    // 巨正则单步模拟
@@ -114,6 +116,11 @@ private:
     std::mt19937 gen;
     std::uniform_real_distribution<double> real_dis; // [-1,1]均匀分布
     std::uniform_real_distribution<double> uni_dis; // [0,1]均匀分布
+
+    // 旋转移动缓存（性能优化）
+    std::vector<std::array<double, 3>> rot_mid_cache_data;
+    std::vector<double*> rot_mid_cache_ptrs;
+    std::vector<double> rot_mid_cache_weights;
     
     // 私有方法
     void build_topology_map(); // 构建环状拓扑
@@ -146,7 +153,7 @@ private:
     
     // 辅助函数
     static void Rot_temp(double* vec, double** r_temp_rot, int k_max);
-    void Find_Last(double* r1, double* r2, double** r_temp_rot, int k_max);
+    bool Find_Last(double* r1, double* r2, double** r_temp_rot, int k_max);
     
     // 禁用拷贝构造和赋值
     Bulk_RingPolymer(const Bulk_RingPolymer& other) = delete;
