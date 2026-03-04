@@ -20,7 +20,10 @@
       "Bash(tail:*)",
       "Bash(mkdir:*)",
       "Bash(./test_temp/build/Release/test_bulk_density.exe:*)",
-      "Bash(cmake:*)"
+      "Bash(cmake:*)",
+      "Bash(./Release/test_bulk_density.exe:*)",
+      "Bash(mv:*)",
+      "Bash(rm:*)"
     ]
   }
 }

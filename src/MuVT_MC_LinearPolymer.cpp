@@ -484,7 +484,7 @@ void MuVT_MC_LinearPolymer::set_seed(unsigned int seed)
 // ======================================================================
 
 
-// claude write 牛车 
+// claude write 
 void MuVT_MC_LinearPolymer::Find_Last(double *r1, double *r2, double **r_temp_rot, int k_max)
 {
     // 计算向量 v = r2 - r1 和中间点 M
@@ -858,7 +858,7 @@ void MuVT_MC_LinearPolymer::rot_end_move(int monomer_index ,int polymer_index, i
 
 // 使用 check_collision_except_monomer 函数重写的 rot_mid_move 函数
 
-// claude write too slow
+// claude write 
 void MuVT_MC_LinearPolymer::rot_mid_move(int monomer_index ,int polymer_index)
 {
     this->num_rot++;

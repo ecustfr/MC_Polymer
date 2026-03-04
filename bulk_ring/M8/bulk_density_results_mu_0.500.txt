@@ -1,0 +1,29 @@
+# mu_b: 0.5
+# ave_density: 0.0562488
+# std_density: 0.00454933
+# sample_times: 8000
+# block_count: 4
+# block_mean_density: 0.0562488
+# block_se_density: 7.267e-05
+# block_std_density: 0.00014534
+# <W>: 0.00450964
+# mu_ex: 5.40154
+# mu_id: -4.95741
+# mu_calc: 0.444125
+# (mu_calc - mu_input): -0.0558747
+# block_mean_W: 0.00450964
+# block_se_W: 0.000115667
+# block_std_W: 0.000231333
+# block_mean_mu_ex: 5.40287
+# block_se_mu_ex: 0.025888
+# block_std_mu_ex: 0.051776
+# block_mu_ex_values: 5.4056 5.33711 5.48132 5.38745
+# block_mean_mu_id: -4.95742
+# block_se_mu_id: 0.00129216
+# block_std_mu_id: 0.00258432
+# block_mu_id_values: -4.96078 -4.95452 -4.95904 -4.95532
+# final_EPS_TRANS: 0.02
+# final_trans_acceptance: 0
+# final_rotation_acceptance: 0
+# final_insertion_acceptance: 0
+# final_deletion_acceptance: 0

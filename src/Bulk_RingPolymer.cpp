@@ -276,6 +276,16 @@ double Bulk_RingPolymer::get_delete_acceptance() const {
     return (this->num_delete > 0) ? static_cast<double>(this->acc_delete) / this->num_delete : 0.0;
 }
 
+// 获取平移接受率
+double Bulk_RingPolymer::get_translation_acceptance() const {
+    return (this->num_trans > 0) ? static_cast<double>(this->acc_trans) / this->num_trans : 0.0;
+}
+
+// 获取旋转接受率
+double Bulk_RingPolymer::get_rotation_acceptance() const {
+    return (this->num_rot > 0) ? static_cast<double>(this->acc_rot) / this->num_rot : 0.0;
+}
+
 // 碰撞检测方法
 bool Bulk_RingPolymer::overlap_other_monomer_one(const double* r_other, const double* r_try) const {
     double dx = this->dis_period(r_other[0], r_try[0], this->box_size[0]);
@@ -520,7 +530,7 @@ void Bulk_RingPolymer::rot_polymer_move(int polymer_index) {
 void Bulk_RingPolymer::mc_one_step() {
     // 对每个聚合物进行平移和旋转
     for (int polymer_index = 0; polymer_index < this->N_now; polymer_index++) {
-        // this->trans_move(polymer_index);
+        this->trans_move(polymer_index);
         this->rot_polymer_move(polymer_index);
     }
 }
@@ -529,8 +539,8 @@ void Bulk_RingPolymer::mc_one_step() {
 void Bulk_RingPolymer::run_simulation(int steps) {
     std::cout << "Running simulation for " << steps << " steps..." << std::endl;
     for (int step = 0; step < steps; step++) {
-        this->mc_one_step();
-        
+        // this->mc_one_step();
+        this->mc_one_step_MuVT();
         // 每1000步打印一次状态
         if (step % 1000 == 0) {
             std::cout << "Step " << step << ", N_now = " << this->N_now << ", MN_now = " << this->MN_now << std::endl;

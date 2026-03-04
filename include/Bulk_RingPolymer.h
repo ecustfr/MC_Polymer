@@ -63,6 +63,8 @@ public:
     // 统计获取方法
     double get_insert_acceptance() const;
     double get_delete_acceptance() const;
+    double get_translation_acceptance() const;
+    double get_rotation_acceptance() const;
     
 private:
     // 系统状态

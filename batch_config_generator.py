@@ -38,7 +38,8 @@ BASE_CONFIG = {
         "H": 20.0, 
         "rcut": 1.0, 
         "max_N": 1280,
-        "external_potential": "custom"
+        "external_potential": "custom",
+        "sigma":1
     },
     "simulation_params": 
     {

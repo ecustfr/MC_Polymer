@@ -36,29 +36,62 @@ set(SOURCES
     ${PROJECT_SOURCE_DIR}/src/Utils.cpp
 )
 
-add_library(MuVTPolymer src/MuVT_MC_LinearPolymer.cpp src/Utils.cpp src/MuVT_MC_RingPolymer)
+
+add_library(Utils STATIC src/Utils.cpp)
+
+
+add_library(MuVTPolymer STATIC
+ src/MuVT_MC_LinearPolymer.cpp 
+ src/MuVT_MC_RingPolymer.cpp)
+
+target_link_libraries(MuVTPolymer PRIVATE Utils)
+
+add_library(BulkRingPolymer STATIC src/Bulk_RingPolymer.cpp) 
+target_link_libraries(BulkRingPolymer PRIVATE Utils)
+
+add_executable(test_bulk_density bulk_ring/test_bulk_density_final.cpp)
+target_link_libraries(test_bulk_density PRIVATE BulkRingPolymer Utils)
+set_target_properties(test_bulk_density PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/bulk_ring/)
+
 # === 添加 Python 模块 ===
 pybind11_add_module(pymcpolymer ${PROJECT_SOURCE_DIR}/src/pybind11_module.cpp)
 target_link_libraries(pymcpolymer PRIVATE MuVTPolymer Python3::Python)
+
 
 # === 关键修改 ===
 # MSVC 不需要链接 m 库，只有非 MSVC (如 Linux/MinGW) 才需要
 if(NOT MSVC)
     target_link_libraries(MuVTPolymer PRIVATE m)
     target_link_libraries(pymcpolymer PRIVATE m)
+    target_link_libraries(Utils PRIVATE m)
+    target_link_libraries(BulkRingPolymer PRIVATE m)
 endif()
 
 # === 针对 Visual Studio 的优化建议 ===
 if(MSVC)
-    target_compile_options(MuVTPolymer PRIVATE 
-        /MP   # 启用多核编译 (加快编译速度)
-        /W3   # 开启常用警告
-        /utf-8      # 强制源文件和执行字符集为 UTF-8，解决乱码
+    # 启用多核编译 (加快编译速度)，开启常用警告，强制源文件和执行字符集为 UTF-8，解决乱码
+    add_compile_options(/O2 /Oi /Ot /GL)
+    # 链接器优化：启用引用消除和中间代码生成
+    add_link_options(/LTCG /OPT:REF /OPT:ICF)
+    target_compile_options(MuVTPolymer PRIVATE
+        /MP
+        /W3
+        /utf-8
     )
-    target_compile_options(pymcpolymer PRIVATE 
-        /MP   # 启用多核编译 (加快编译速度)
-        /W3   # 开启常用警告
-        /utf-8      # 强制源文件和执行字符集为 UTF-8，解决乱码
+    target_compile_options(pymcpolymer PRIVATE
+        /MP
+        /W3
+        /utf-8
+    )
+    target_compile_options(Utils PRIVATE
+        /MP
+        /W3
+        /utf-8
+    )
+    target_compile_options(BulkRingPolymer PRIVATE
+        /MP
+        /W3
+        /utf-8
     )
     add_compile_options(/utf-8)
     # 设置执行字符集为 UTF-8（可选，/utf-8 已包含此功能）
