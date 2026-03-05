@@ -136,23 +136,24 @@ def recal_simulation(npz_file):
     output_dir = npz_dir
     recal_npz = os.path.join(output_dir,f'recal_result_{config_name}.npz')
     
-    dt = np.dtype([('z','f8'),('G','f8'),('rho_profile','f8'),('mu_ex','f8'),('bz_vext','f8') ])
+    dt = np.dtype([('z','f8'),('G','f8'),('rho_profile','f8'),('mu_ex','f8'),('bz_eff_vext','f8'),('rhob','f8') ])
     G_new = np.real(G_new)
     rho_profile = np.real(rho_profile)
     mu_ex_cal_1 = np.real(mu_ex_cal_1)
     mu_ex_cal_2 = np.real(mu_ex_cal_2)
     bz_vext = np.real(bz_vext)
 
+
     
     ml_data = np.zeros(data_length,dtype=dt)
 
 
     ml_data['rho_profile'] = rho_profile
-    ml_data['bz_vext'] = bz_vext
+    ml_data['bz_eff_vext'] = bz_vext*np.exp(mu_ex_b/M)
     ml_data['mu_ex'] = mu_ex_cal_2
     ml_data['G'] = G_new
     ml_data['z'] = z 
-
+    ml_data['rhob'] =  np.ones(data_length)*rhob_seg
     npy_path = os.path.join(output_dir,'simData'+config_index+'.npy')
     # save_data = {'G':G_new,'rho_profile':rho_profile,'mu_ex_1':mu_ex_cal_1,'mu_ex_2':mu_ex_cal_2,'bz_vext':bz_vext}
 
@@ -160,6 +161,7 @@ def recal_simulation(npz_file):
     # utils.save_npz_data(recal_npz,save_data)
 
 #   csv文件 
+    """
     csv_output = os.path.join(output_dir, f'recal_results_{config_name}.csv')
     n_points = len(G_new)
     grid_indices = np.arange(n_points)
@@ -174,7 +176,7 @@ def recal_simulation(npz_file):
     
     header = "grid_index,G,mu_ex_1,mu_ex_2,rho_profile,bz_Vext"
     np.savetxt(csv_output, csv_data, delimiter=',', header=header, comments='')
-
+    """
     return {'sim_index':config_index, 'path':npy_path}  
 
 
