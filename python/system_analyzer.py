@@ -198,6 +198,7 @@ class DistributionAnalyzer:
             self.acc_cnt += profile[:, 0]
             self.acc_val += profile[:, 1]
         else:
+            
             raise ValueError(f"不支持的返回形状: {profile.shape}。请返回 (bins,) 或 (bins, 2)")
             
         self.total_samples += 1
@@ -283,6 +284,33 @@ def cal_mono_density_profile(sim: Any, dz: float, n_bins: int, monomer_index: in
     # 5. 填充结果
     bin_volume = dz * sim.get_box_xy() * sim.get_box_xy()
     profile[:, 1] = counts.astype(float)/bin_volume  # 存储分布数值
+    profile[:, 0] = 1.0                   # 这一帧的采样权重记为 1
+    
+    return profile
+
+
+def cal_all_monomer_density(sim:Any,dz:float,n_bins:int,M:int)->np.ndarray:
+    
+    profile = np.zeros((n_bins, M+1))
+    
+    # 2. 获取所有粒子的坐标
+    # 假设 r 的形状是 (N_total, 3)
+    r = sim.r_total
+    M = sim.get_M()
+    
+    # 3. 核心：使用切片步长提取所有链的第 monomer_index 个单体
+    # r[start:end:step] -> 从 monomer_index 开始，每隔 M 个取一个，取第 2 列(z)
+    z_coords = r[:, 2]
+    
+    # 4. 统计直方图
+    # range 必须从 0 到 n_bins * dz，确保跟 Analyzer 对齐
+    bin_volume = dz * sim.get_box_xy() * sim.get_box_xy()
+    for mono in range(M):
+        counts, _ = np.histogram(z_coords[mono:-1:M], bins=n_bins, range=(0, n_bins * dz))
+        profile[:,mono+1] = counts.astype(float)/bin_volume 
+    # 5. 填充结果
+    
+    # profile[:, 1] = counts.astype(float)/bin_volume  # 存储分布数值
     profile[:, 0] = 1.0                   # 这一帧的采样权重记为 1
     
     return profile

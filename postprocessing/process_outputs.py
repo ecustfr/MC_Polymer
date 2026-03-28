@@ -11,12 +11,13 @@
 支持并行处理以加速大量文件的处理。
 
 使用方法：
-    python process_outputs.py [--add-extra] [--overwrite] [--max-workers]
+    python process_outputs.py [--add-extra] [--overwrite] [--max-workers] [--no-ml]
 
 选项：
     --add-extra: 在JSON文件中添加额外字段
     --overwrite: 即使NPZ文件已存在也重新生成后处理文件
     --max-workers: 并行工作进程数，默认为CPU核心数，设为1则顺序处理
+    --no-ml: 不应用于机器学习，只生成NPZ文件，不进行recal和数据集分配
 """
 
 import os
@@ -118,7 +119,7 @@ def ensure_npz_file(json_path, overwrite=False):
     return npz_file
 
 
-def process_single_json_file(json_file, overwrite=False, add_json_or_not=False, add_json=None):
+def process_single_json_file(json_file, overwrite=False, add_json_or_not=False, add_json=None, ml=True):
     """
     处理单个JSON文件（不包含绘图）。
     用于并行处理。
@@ -128,9 +129,11 @@ def process_single_json_file(json_file, overwrite=False, add_json_or_not=False, 
         overwrite: 是否覆盖已存在的NPZ文件
         add_extra: 是否在JSON中添加额外字段
         extra_fields: 要添加的额外字段字典，格式为{"section.key": value}
+        ml: 是否应用于机器学习，默认True。如果为False，只生成NPZ文件，不进行recal
 
     返回:
-        success: 布尔值，成功返回True，失败抛出异常
+        如果ml为True: 返回recal_simulation的结果（字典或None）
+        如果ml为False: 返回包含npz_file路径的字典{'npz_file': npz_file}
     """
     # 步骤1: 可选 - 在JSON中添加额外字段
     if add_json_or_not:
@@ -139,14 +142,14 @@ def process_single_json_file(json_file, overwrite=False, add_json_or_not=False, 
     # 步骤2: 必要 - 确保NPZ文件存在
     npz_file = ensure_npz_file(json_file, overwrite=overwrite)
 
-    # 步骤3: 必要 - 运行重新计算并保存结果
-    recal_npz_file = recal_simulation(npz_file)
+    # 步骤3: 根据ml标志决定是否运行重新计算
+    if ml:
+        recal_npz_file = recal_simulation(npz_file)
+        return recal_npz_file
+    else:
+        # 只生成NPZ文件，不进行recal
+        return {'npz_file': npz_file}    
     
-    # recal_npz_file = None(fale) or a file address(success)
-    return recal_npz_file    
-    
-
-
 
 
 
@@ -183,10 +186,11 @@ def find_output_json_from_input(input_json_path):
         return None
 
 
+
 def main():
     parser = argparse.ArgumentParser(description='处理output文件夹中内容并再计算的整合功能')
-    parser.add_argument('--input-dir', default=os.path.join('input', 'Ring_configs_linux'),
-                       help='input目录中的JSON配置文件目录 (默认: input/Ring_configs_linux)')
+    parser.add_argument('--input-dir', default=os.path.join('input', 'bulk_Linear_M6'), #INPUT2
+                       help='input目录中的JSON配置文件目录')
     parser.add_argument('--overwrite', action='store_true',default=True,
                        help='即使NPZ文件已存在也重新生成后处理文件')
     parser.add_argument('--max-workers', type=int, default=6,
@@ -195,13 +199,14 @@ def main():
                        help='失败文件日志输出路径（JSON格式），如果不指定则不保存')
     parser.add_argument('--extra-field', action='append', default=[],
                        help='要添加的额外字段，格式为"key=value"或"section.key=value"，可多次使用')
-
+    parser.add_argument('--no-ml', action='store_false', dest='ml', default=False,
+                       help='不应用于机器学习，只生成NPZ文件，不进行recal和数据集分配')
 
     args = parser.parse_args()
 
     # 解析extra-field参数为字典
     
-    add_json = {"input_params":{"sigma":1,"mu_ex_0":4.848994294}}
+    add_json = None # {"input_params":{"mu_ex_0":0}}   {"input_params":{"sigma":1,"mu_ex_0":4.848994294}}
 
     add_json_or_not = bool(add_json)  # 如果extra_fields非空，则启用add_extra
 
@@ -248,7 +253,7 @@ def main():
         for json_file in json_files:
             future = executor.submit(
                 process_single_json_file,
-                json_file, args.overwrite, add_json_or_not, add_json
+                json_file, args.overwrite, add_json_or_not, add_json, args.ml
             )
             future_to_json[future] = json_file
 
@@ -264,10 +269,12 @@ def main():
                 sim_result = future.result() # future.result() 返回值对应的
                 if sim_result is not None:
                     success_files.append(json_file)
-                    #need_to_sum_indexs.append(sim_result['sim_index'])
-                    #need_to_sum_files.append(sim_result['path'])
-                    need_to_sum_files.append(sim_result)
-                    # print(f"[{completed}/{total}] 成功处理: {json_file}")
+                    if args.ml:
+                        # 只有机器学习模式才收集到need_to_sum_files
+                        #need_to_sum_indexs.append(sim_result['sim_index'])
+                        #need_to_sum_files.append(sim_result['path'])
+                        need_to_sum_files.append(sim_result)
+                        # print(f"[{completed}/{total}] 成功处理: {json_file}")
             except Exception as e:
                 error_info = {
                     'json_file': json_file,
@@ -284,34 +291,34 @@ def main():
     print(f"成功处理: {len(success_files)} 个配置文件")
     print(f"处理失败: {len(failed_files)} 个配置文件")
 
-    percent = [0.7,0.15,0.15]
-    train_num = int(percent[0]*len(success_files))
-    test_num = int(percent[1]*len(success_files))
-    valid_num = len(success_files) - train_num - test_num
-    
-    simData = {
-        'train':{},
-        'test':{},
-        "validation":{}
-        }
-    shuffle_or_not = False
-    if shuffle_or_not:
-        random.shuffle(need_to_sum_files)
-    # result = {'sim_index':config_index, 'path':npy_path}  
-#-----------------------------------------------------------------------------------------------------------
-    for (i,result) in enumerate(need_to_sum_files):
-        key = "sim_"+result['sim_index']
-        value = np.load(result['path']) # ,mmap_mode='r'
-
-        if i<train_num:
-            simData['train'][key] = value
-        elif i<train_num + test_num:
-            simData['test'][key] = value
-        else:
-            simData['validation'][key] = value
+    if args.ml:
+        # 只有机器学习模式才进行数据集分配和保存
+        percent = [0.8,0.2]
+        train_num = int(percent[0]*len(success_files))
+        test_num = int(percent[1]*len(success_files))
+        # valid_num = len(success_files) - train_num - test_num
         
-
-    np.save('simData.npy',simData,allow_pickle = True)
+        simData = {
+            'train':{},
+            'test':{}
+            }
+        shuffle_or_not = True
+        if shuffle_or_not:
+            random.shuffle(need_to_sum_files)
+        # result = {'sim_index':config_index, 'path':npy_path}  
+    #-----------------------------------------------------------------------------------------------------------
+        for (i,result) in enumerate(need_to_sum_files):
+            key = "sim_"+result['sim_index']
+            value = np.load(result['path']) # ,mmap_mode='r'
+    
+            if i<train_num:
+                simData['train'][key] = value
+            else:
+                simData['test'][key] = value
+    
+            
+    
+        np.save('simData2.npy',simData,allow_pickle = True)
     
 
 #-----------------------------------------------------------------------------------------------------------

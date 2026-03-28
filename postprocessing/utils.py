@@ -47,7 +47,7 @@ def find_block_files(output_dir, pattern='block_*_rho_profile.dat'):
     return files
 
 
-def load_density_profile(file_path):
+def load_total_density_profile(file_path):
     """
     加载密度分布文件。
 

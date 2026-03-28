@@ -14,7 +14,7 @@ from pathlib import Path
 
 # 假设 run_simulation.py 在同级目录
 SCRIPT_DIR = Path(__file__).resolve().parent
-SIMULATION_SCRIPT = SCRIPT_DIR / 'run_simulation_ring.py'
+SIMULATION_SCRIPT = SCRIPT_DIR / 'run_simulation_linear.py'
 
 def check_config_conflicts(config_files):
     """检测输出目录冲突"""
@@ -108,9 +108,11 @@ def run_single_task(config_path):
         }
 
 def main():
+    default_input_dir = str(SCRIPT_DIR/'input/bulk_Linear_M6' )
+    default_max_processes = 4
     parser = argparse.ArgumentParser(description="Parallel Simulation Runner")
-    parser.add_argument('--input-dir', '-i', type=str, default=str(SCRIPT_DIR/'input/Ring_configs' ))# 'input/Linear_configs'
-    parser.add_argument('--max-processes', '-m', type=int, default=3)
+    parser.add_argument('--input-dir', '-i', type = str, default = default_input_dir)# 'input/Linear_configs'
+    parser.add_argument('--max-processes', '-m', type = int, default = default_max_processes)
     args = parser.parse_args()
 
     input_dir = Path(args.input_dir)

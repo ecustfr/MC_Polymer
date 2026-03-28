@@ -11,7 +11,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
 
-def calculate_custom_Vext(z, An, phi_n, box_size_z, Vlin_par, x_tar):
+def calculate_custom_Vext(z, An, phi_n, box_size_z, Vlin_par, x_tar, n_components=None, delta_Vext=0.0):
     """
     Calculate external potential at position z
 
@@ -26,23 +26,41 @@ def calculate_custom_Vext(z, An, phi_n, box_size_z, Vlin_par, x_tar):
     box_size_z : float
         Box size in z-direction
     Vlin_par : list of list of float
-        Parameters for linear segments (2x4 matrix)
+        Parameters for linear segments (2xn matrix)
     x_tar : list of list of float
-        Target intervals for linear segments (2x4 matrix)
+        Target intervals for linear segments (2xn matrix)
+    n_components : int, optional
+        Number of components (sine + linear). If None, inferred from An length.
+    delta_Vext : float, optional
+        Potential shift value (subtracted from V in non-hardwall regions)
 
     Returns:
     --------
     float
         External potential value at position z
     """
+    # Determine number of components
+    if n_components is None:
+        n_components = len(An)
+
+    # Validate input dimensions
+    if len(An) != n_components:
+        raise ValueError(f"An length ({len(An)}) does not match n_components ({n_components})")
+    if len(phi_n) != n_components:
+        raise ValueError(f"phi_n length ({len(phi_n)}) does not match n_components ({n_components})")
+    if len(Vlin_par) != 2 or len(Vlin_par[0]) != n_components or len(Vlin_par[1]) != n_components:
+        raise ValueError(f"Vlin_par must be 2x{n_components} matrix")
+    if len(x_tar) != 2 or len(x_tar[0]) != n_components or len(x_tar[1]) != n_components:
+        raise ValueError(f"x_tar must be 2x{n_components} matrix")
+
     # Calculate Vext1: sum of sine functions
     Vext1 = 0.0
-    for n in range(4):
-        Vext1 += An[n] * np.sin(2 * np.pi * (n+1) * z / box_size_z + phi_n[n])
+    for n in range(n_components):
+        Vext1 += 0.5*An[n] * np.sin(2 * np.pi * (n+1) * z / box_size_z + phi_n[n])
 
     # Calculate Vext2: sum of linear functions
     Vext2 = 0.0
-    for n in range(4):
+    for n in range(n_components):
         x1, x2 = x_tar[0][n], x_tar[1][n]
         if x1 <= z <= x2:
             V_temp = Vlin_par[0][n] + (Vlin_par[1][n] - Vlin_par[0][n]) * (z - x1) / (x2 - x1)
@@ -54,10 +72,12 @@ def calculate_custom_Vext(z, An, phi_n, box_size_z, Vlin_par, x_tar):
     # Boundary condition (using [0, box_size_z] range)
     if z < 0.5 or z > box_size_z - 0.5:
         V = 1e20
+    else:
+        V -= delta_Vext
 
     return V
 
-def create_potential_function(An, phi_n, box_size_z, Vlin_par, x_tar, C=1.0):
+def create_potential_function(An, phi_n, box_size_z, Vlin_par, x_tar, C=1.0, n_components=None, delta_Vext=0.0):
     """
     Create potential function with given parameters
 
@@ -70,11 +90,15 @@ def create_potential_function(An, phi_n, box_size_z, Vlin_par, x_tar, C=1.0):
     box_size_z : float
         Box size in z-direction
     Vlin_par : list of list of float
-        Parameters for linear segments (2x4 matrix)
+        Parameters for linear segments (2xn matrix)
     x_tar : list of list of float
-        Target intervals for linear segments (2x4 matrix)
+        Target intervals for linear segments (2xn matrix)
     C : float, optional
         Amplitude scaling factor
+    n_components : int, optional
+        Number of components (sine + linear). If None, inferred from An length.
+    delta_Vext : float, optional
+        Potential shift value (subtracted from V in non-hardwall regions)
 
     Returns:
     --------
@@ -82,7 +106,14 @@ def create_potential_function(An, phi_n, box_size_z, Vlin_par, x_tar, C=1.0):
         Potential function that takes z as input
     """
     def potential(z):
-        return C * calculate_custom_Vext(z, An, phi_n, box_size_z, Vlin_par, x_tar)
+        # 先计算原始势能（无平移）
+        V_raw = calculate_custom_Vext(z, An, phi_n, box_size_z, Vlin_par, x_tar, n_components, 0.0)
+        # 应用缩放
+        V_scaled = C * V_raw
+        # 减去平移量（仅对非边界区域）
+        if not (z < 0.5 or z > box_size_z - 0.5):
+            V_scaled -= delta_Vext
+        return V_scaled
 
     return potential
 
@@ -117,11 +148,13 @@ def create_potential_function_from_params(params, box_size_z):
         Vlin_par = params['Vlin_par']
         x_tar = params['x_tar']
         C = params.get('C', 1.0)
-        return create_potential_function(An, phi_n, box_size_z, Vlin_par, x_tar, C)
+        n_components = params.get('n_components')  # Optional, can be None
+        delta_Vext = params.get('delta_Vext', 0.0)  # Optional, default 0.0
+        return create_potential_function(An, phi_n, box_size_z, Vlin_par, x_tar, C, n_components, delta_Vext)
     else:
         raise ValueError(f"Unknown potential type: {potential_type}")
 
-def generate_vext_params(H, potential_type="custom", n_steps=3, seed=None, **kwargs):
+def generate_vext_params(H, potential_type="custom", n_steps=3, n_components=4, seed=None, **kwargs):
     """
     Generate external potential parameters
 
@@ -133,11 +166,14 @@ def generate_vext_params(H, potential_type="custom", n_steps=3, seed=None, **kwa
         Type of potential: "custom" (sine+linear) or "step"
     n_steps : int, optional
         Number of steps for step potential (if potential_type="step")
+    n_components : int, optional
+        Number of components for custom potential (if potential_type="custom")
     seed : int, optional
         Random seed for reproducibility
     **kwargs : dict
         Additional parameters passed to specific potential generators
         For step potential: potential_mean, potential_std
+        For custom potential: C (amplitude scaling factor)
 
     Returns:
     --------
@@ -159,21 +195,26 @@ def generate_vext_params(H, potential_type="custom", n_steps=3, seed=None, **kwa
         )
     elif potential_type == "custom":
         rng = np.random.default_rng(seed)  # Using independent random stream
+        C = kwargs.get('C', 1.0)  # Amplitude scaling factor
+        delta_Vext = kwargs.get('delta_Vext', 0.0)  # Potential shift value
 
         # Ensure correct sorting
-        x_tar = np.sort(rng.random((2, 4)) * H, axis=0)
+        x_tar = np.sort(rng.random((2, n_components)) * H, axis=0)
 
         return {
             "potential_type": "custom",
-            "An": rng.normal(0, np.sqrt(2.5), 4).tolist(),
-            "phi_n": (2 * np.pi * rng.random(4)).tolist(),
-            "Vlin_par": rng.normal(0, 2, (2, 4)).tolist(),
-            "x_tar": x_tar.tolist()
+            "n_components": n_components,
+            "An": rng.normal(0, np.sqrt(2.5), n_components).tolist(),
+            "phi_n": (2 * np.pi * rng.random(n_components)).tolist(),
+            "Vlin_par": rng.normal(0, 2, (2, n_components)).tolist(),
+            "x_tar": x_tar.tolist(),
+            "C": C,
+            "delta_Vext": delta_Vext
         }
     else:
         raise ValueError(f"Unknown potential type: {potential_type}")
 
-def plot_potential(An, phi_n, box_size_z, Vlin_par, x_tar, C=1.0, output_file=None):
+def plot_potential(An, phi_n, box_size_z, Vlin_par, x_tar, C=1.0, output_file=None, n_components=None, delta_Vext=0.0):
     """
     Plot external potential distribution
 
@@ -186,13 +227,17 @@ def plot_potential(An, phi_n, box_size_z, Vlin_par, x_tar, C=1.0, output_file=No
     box_size_z : float
         Box size in z-direction
     Vlin_par : list of list of float
-        Parameters for linear segments (2x4 matrix)
+        Parameters for linear segments (2xn matrix)
     x_tar : list of list of float
-        Target intervals for linear segments (2x4 matrix)
+        Target intervals for linear segments (2xn matrix)
     C : float, optional
         Amplitude scaling factor
     output_file : str, optional
         Output file path for saving the plot
+    n_components : int, optional
+        Number of components. If None, inferred from An length.
+    delta_Vext : float, optional
+        Potential shift value (subtracted from V in non-hardwall regions)
 
     Returns:
     --------
@@ -203,10 +248,13 @@ def plot_potential(An, phi_n, box_size_z, Vlin_par, x_tar, C=1.0, output_file=No
     z_max = box_size_z
     z_values = np.linspace(z_min, z_max, 1000)
     
+    # Create potential function with decoupled shift
+    potential_func = create_potential_function(An, phi_n, box_size_z, Vlin_par, x_tar, C, n_components, delta_Vext)
+
     # Calculate potential values
     potential_values = []
     for z in z_values:
-        V = C * calculate_custom_Vext(z, An, phi_n, box_size_z, Vlin_par, x_tar)
+        V = potential_func(z)
         # Cap potential at a reasonable value for plotting
         V = min(V, 50.0)
         potential_values.append(V)
@@ -568,7 +616,9 @@ def _generate_potential_plot_file(Vext_params, box_size_z, output_dir, external_
         Vlin_par = Vext_params['Vlin_par']
         x_tar = Vext_params['x_tar']
         C = Vext_params.get('C', 1.0)
-        plot_potential(An, phi_n, box_size_z, Vlin_par, x_tar, C=C, output_file=plot_file)
+        n_components = Vext_params.get('n_components')  # Optional, can be None
+        delta_Vext = Vext_params.get('delta_Vext', 0.0)  # Optional, default 0.0
+        plot_potential(An, phi_n, box_size_z, Vlin_par, x_tar, C=C, output_file=plot_file, n_components=n_components, delta_Vext=delta_Vext)
     elif potential_type == 'step':
         # Step potential plot
         boundaries = Vext_params['boundaries']

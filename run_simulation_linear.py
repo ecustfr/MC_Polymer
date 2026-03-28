@@ -41,6 +41,18 @@ def read_config(config_file):
     """Read configuration file"""
     with open(config_file, 'r') as f:
         return json.load(f)
+    
+def cal_all_monomer_density(r,dz:float,n_bins:int,M:int,bin_volume:float)->np.ndarray:
+    
+    profile = np.zeros((n_bins, M))
+    
+    z_coords = r[:, 2]
+    
+    for mono in range(M):
+        counts, _ = np.histogram(z_coords[mono:-1:M], bins=n_bins, range=(0, n_bins * dz))
+        profile[:,mono] = counts.astype(float)/bin_volume 
+    
+    return profile
 
 
 def run_simulation(config):
@@ -88,8 +100,8 @@ def run_simulation(config):
     )
 
     # 默认行为：外势beta=1.0
-    mc_sys.set_external_beta(1.0)
-    print("Using default beta_ext=1.0")
+    # mc_sys.set_external_beta(1.0)
+    # print("Using default beta_ext=1.0")
 
     # Set external potential using the unified function
     setup_external_potential(mc_sys, input_params, config, output_dir)
@@ -105,35 +117,11 @@ def run_simulation(config):
     dz = simulation_params['dz']  # z-axis interval for density distribution
     n_bins = int(input_params['H'] / dz)  # Number of bins for density distribution
 
-
-    rho_profile = DistributionAnalyzer(name = "rho_two_profile", dz=dz , bins=n_bins)
-
-
-    W_insert = GlobalPropertyAnalyzer(name = "mu")
-    # Analyzer for fixed z w(z) calculation at multiple points
-    num_wz_points = 3  # number of uniformly distributed points
     H = mc_sys.get_H()
-    # Generate uniformly distributed points (avoiding boundaries)
-    z_points = np.array([1.5,3,4.5])#np.linspace(0.5*dz, H-0.5*dz, num_wz_points)
-    # Create analyzers for each point
-    Wz_fix_z_analyzers = [GlobalPropertyAnalyzer(name=f"wz_fix_z_{i}") for i in range(num_wz_points)]
+    M = mc_sys.get_M()
+    # rho_profile = DistributionAnalyzer(name = "rho_two_profile", dz=dz , bins=n_bins)
 
-    # Energy trajectory file
-    # energy_trace_file = f"{output_params['output_dir']}/{output_params['output_prefix']}_energy_trace.dat"
-
-    # Wz_insert = DistributionAnalyzer(name = "Wz_profile", dz=dz , bins=n_bins)
-    # Initialize W_insert accumulation variables
-
-
-
-    trace_file = f"{output_params['output_dir']}/{output_params['output_prefix']}_trajectory.xyz"
-
-    # Open energy trace file
-    #energy_trace_file = f"{output_params['output_dir']}/{output_params['output_prefix']}_energy_trace.dat"
-    #energy_trace_fp = open(energy_trace_file, 'w')
-    #energy_trace_fp.write("# Step Block External_Energy\n")  # Header
-
-
+    rho_all_profile = np.zeros([n_bins,M])
 
     # Initialize current simulation parameters
     current_eps_trans = simulation_params['EPS_TRANS']
@@ -145,12 +133,14 @@ def run_simulation(config):
     # Main simulation loop
     print(f"Starting simulation, {simulation_params['sample_block']} blocks, {simulation_params['sample_time']} steps per block")
 
-    static_mono = 2
-    insert_time = 50
+    # static_mono = 2
+    # insert_time = 50
     V = mc_sys.get_box_xy() * mc_sys.get_box_xy() * mc_sys.get_H()
+    bin_volume = mc_sys.get_box_xy()*mc_sys.get_box_xy()*dz
+
     for block in range(simulation_params['sample_block']):
         print(f"\n--- Block {block} started ---")
-
+        n_sample = 0
         # Reset simulation records
         mc_sys.reset_mc_record()
 
@@ -163,91 +153,44 @@ def run_simulation(config):
             mc_sys.mc_one_step_MuVT()
 
 
-            # Optional polymer-specific moves (uncomment if needed)
-            # mc_sys.insert_move(simulation_params['K_MAX'])
-            # mc_sys.delete_move(simulation_params['K_MAX'], np.random.randint(0, mc_sys.get_N_now())   )
-
-
             # Sample data periodically
             if step % simulation_params['sample_interval'] == 0:
+                r = mc_sys.r_total
+                rho_all_profile += cal_all_monomer_density(r,dz,n_bins,M,bin_volume)
+                n_sample = n_sample+1 
 
-                # Record trajectory (every 100 sample points)
-                #if step % (simulation_params['sample_interval'] * 100) == 0:
-                  #trace_recorder.write_frame(mc_sys.r_total, mc_sys.get_N_now(), block * simulation_params['sample_time'] + step)
-
-                rho_profile.accumulate(mc_sys,lambda s,b,d :cal_mono_density_profile(s,b,d,static_mono))
-                #rho_profile.accumulate(mc_sys,cal_density_profile)
-
-                # Record external potential energy to trace file
-                # current_energy = mc_sys.calculate_external_energy()
-                # total_step = block * simulation_params['sample_time'] + step
-                # energy_trace_fp.write(f"{total_step} {block} {current_energy:.6f}\n")
-
-                """
-                Wz_insert.accumulate(
-                    mc_sys,
-                    lambda s,d,b :cal_Wz_profile(s,d,b,static_mono,simulation_params['K_MAX'], insert_time)
-                )
-
-                G_profile.accumulate(
-                    mc_sys,
-                    lambda s,d,b :cal_G_profile(s,d,b,static_mono,simulation_params['K_MAX'], insert_time)
-                    )
-                """
-
-
-                for time in range(0,insert_time):
-                    W_insert.accumulate(mc_sys,lambda s:cal_W(s,simulation_params['K_MAX']) )
-                    for analyzer, z_pos in zip(Wz_fix_z_analyzers, z_points):
-                        analyzer.accumulate(mc_sys,lambda s,z=z_pos:cal_wz_fix_z(s,z,static_mono,simulation_params['K_MAX']) )
 
 
 
         # End block
+## ---------------------------------------------------------------------------------------------------------------------------------------------------
         mc_sys.end_block(block)
 
-        # Get average results for current block
-        # block_avg_rg_values = polymer_analyzer.get_average_values()
-        block_avg_density_profile = rho_profile.average
-        mu_block = -np.log(W_insert.average)
-        # Wz_insert_average = -np.log(Wz_insert.average,where=(Wz_insert.average>0))
-        # Calculate w(z) for each fixed point
-        wz_fix_z_values = [-np.log(analyzer.average) if analyzer.average > 0 else 0.0 for analyzer in Wz_fix_z_analyzers]
+
+
         n_now = mc_sys.get_N_now()
+        rho_all_profile = rho_all_profile/n_sample
+        n_sample = 0
 
-        # Calculate density at fixed z positions and corresponding mu_z_i = wz_value + log(rho(z))
-        mu_z_values = []
-        for i, (z_pos, wz_value) in enumerate(zip(z_points, wz_fix_z_values)):
-            # Convert z position to bin index
-            bin_index = int(z_pos / dz)
-            rho_z = block_avg_density_profile[bin_index]
-            mu_z = wz_value + np.log(rho_z) if rho_z > 0 else wz_value
-            mu_z_values.append(mu_z)
-
-        #block_overall_avg_rg = np.mean(block_avg_rg_values[:n_now])
-
-        # Save current block results, only keep actual N_now rows
+## ---------------------------------------------------------------------------------------------------------------------------------------------------
+# Save to only-data file
         # recorder.save(f"{output_params['output_dir']}/block_{block}_rg_values.dat", block_avg_rg_values[:n_now])
-        recorder.save(f"{output_params['output_dir']}/block_{block}_{rho_profile.name}.dat", block_avg_density_profile)
+        # recorder.save(f"{output_params['output_dir']}/block_{block}_{rho_profile.name}.dat", block_avg_density_profile)
         #recorder.save(f"{output_params['output_dir']}/block_{block}_{Wz_insert.name}.dat", Wz_insert_average)
+        recorder.save(f"{output_params['output_dir']}/block_{block}_rho_profile.dat",rho_all_profile)
 
 
-        # Save current block overall average radius of gyration, chemical potential, and simulation parameters
+## ---------------------------------------------------------------------------------------------------------------------------------------------------
+# save to ensemble average file
         trans_acceptance = mc_sys.get_trans_acceptance()
         rot_acceptance = mc_sys.get_rot_acceptance()
         insert_acceptance = mc_sys.get_insert_acceptance()
         delete_acceptance = mc_sys.get_delete_acceptance()
-        # reptation_acceptance = mc_sys.get_reptation_acceptance()
-        # Get current external beta value
-        # current_beta_ext = mc_sys.get_current_external_beta()
+
 
         with open(f"{output_params['output_dir']}/block_{block}_ensemble_data.dat", 'w') as f:
             # f.write(f"average_rg {block_overall_avg_rg:.6f}\n")
             f.write(f"end_rho_avg {n_now/V:.6f}\n")
-            f.write(f"average_mu {mu_block+np.log(n_now/V):.6f}\n")
-            # Output mu_z_i = wz_value + log(rho(z)) for each fixed point
-            for i, (z_pos, mu_z) in enumerate(zip(z_points, mu_z_values)):
-                f.write(f"mu_z_{i} z={z_pos:.3f} value={mu_z:.6f}\n")
             f.write(f"eps_trans {current_eps_trans:.6f}\n")
             f.write(f"K_MAX {current_k_max}\n")
             # f.write(f"current_beta_ext {current_beta_ext:.6f}\n")
@@ -257,8 +200,8 @@ def run_simulation(config):
 
 
 
-
-
+## -----------------------------------------------------------------------------------------------------------------------------------------------------
+# reset simulation parameters and 
 
         print(f"  Parameters before adjustment: EPS_TRANS={current_eps_trans}, K_MAX={current_k_max}")
         if trans_acceptance > 0.5:
@@ -279,11 +222,11 @@ def run_simulation(config):
 
         # Reset analyzers to accumulate data from scratch for next block
         #G_profile.reset()
-        rho_profile.reset()
-        W_insert.reset()
+        #rho_profile.reset()
+        #W_insert.reset()
         # Reset w(z) analyzers for each point
-        for analyzer in Wz_fix_z_analyzers:
-            analyzer.reset()
+        #for analyzer in Wz_fix_z_analyzers:
+        #    analyzer.reset()
         #Wz_insert.reset()
 
 
@@ -296,8 +239,8 @@ def run_simulation(config):
     # Close energy trace file
     #energy_trace_fp.close()
 
-
-    # Save simulation configuration to file
+##---------------------------------------------------------------------------------------------------------------------------------------------------------------
+    # Save ending of simulation 
     with open(f"{output_params['output_dir']}/config.dat", 'w') as f:
         f.write(f"# Simulation Configuration\n")
         f.write(f"polymer_type: linear\n")
@@ -341,8 +284,6 @@ def main():
     parser = argparse.ArgumentParser(description="Monte Carlo linear polymer simulation")
     parser.add_argument('--config', '-c', type=str, default='config_0000_M8_Trivial_H8.0_mu1.23.json',
                         help='Path to configuration file')
-    parser.add_argument('--monomer-index', '-m', type=int, default=-1,
-                        help='Index of the monomer to analyze density for (-1 for all monomers)')
 
     args = parser.parse_args()
 

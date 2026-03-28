@@ -23,7 +23,8 @@
       "Bash(cmake:*)",
       "Bash(./Release/test_bulk_density.exe:*)",
       "Bash(mv:*)",
-      "Bash(rm:*)"
+      "Bash(rm:*)",
+      "Bash(cd:*)"
     ]
   }
 }

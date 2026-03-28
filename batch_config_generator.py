@@ -20,7 +20,7 @@ from external_potential import generate_vext_params
 # ==============================
 
 CURRENT_SCRIPT_DIR = Path(__file__).resolve().parent
-OUTPUT_ROOT = CURRENT_SCRIPT_DIR / "input" / "Ring_configs"
+OUTPUT_ROOT = CURRENT_SCRIPT_DIR / "input" / "bulk_Linear_M6"
 
 
 
@@ -33,7 +33,7 @@ BASE_CONFIG = {
         "mu_b": 0.870821, 
         "M": 40, 
         "init_N": 64, 
-        "rho_b": 0.4,
+        "rho_b": 0.1, #only for NVT, no meaning for muVT   
         "box_xy": 17.8886, 
         "H": 20.0, 
         "rcut": 1.0, 
@@ -48,7 +48,7 @@ BASE_CONFIG = {
         "K_MAX": 10,
         "sample_interval": 5, 
         "sample_time": 40000, 
-        "sample_block": 3, 
+        "sample_block": 6, 
         "dz": 0.02
 
     },
@@ -65,7 +65,9 @@ BASE_CONFIG = {
 #必须置入的变量
 
 # MUST_INPUT = {"H":6.0,"polymer_type":"Linear","knot_type":"Linear","init_N":64,"external_potential":"custom"}
-MUST_INPUT = {"H":20.0,"polymer_type":"Ring","knot_type":"Trivial","init_N":64,"external_potential":"custom","C":0.2}
+# MUST_INPUT = {"H":20.0,"polymer_type":"Ring","knot_type":"Trivial","init_N":64,"external_potential":"custom","n_components":10,"C":None,"delta_Vext":None}
+MUST_INPUT = {"H":20.0,"polymer_type":"Linear","knot_type":"Linear","init_N":64,"external_potential":None}#"external_potentail":"custom","n_components":10,"C":None,"delta_Vext":None} 
+# 注意：C和delta_Vext现在通过get_C_and_deltaVext函数根据mu_b和M自动确定
 
 # MUST_INPUT = {"H":6.0,"knot_type":"Linear","init_N":64,"external_potential":"custom"} 
 
@@ -76,11 +78,13 @@ for item in COUPLED_GROUPS:
 
 
 INDEPENDENT_VARS = {
-    "M":[8],
+    "M":[6],
     "rho_b":[0.1],
-    "mu_b":[2.0,3.0,4.0]
+    "mu_b":[8.0,5.0,0.0]
 }
-
+    #mu_b = 5 : rhob_seg = 0.42
+    #mu_b = 2 : rhob_seg = 0.344
+    #mu_b = -3: rhob_seg = 0.1655
 
 """
 COUPLED_GROUPS = [
@@ -123,11 +127,33 @@ def flatten_config(config):
 # 预计算参数所在的层级结构，避免在循环中重复查找
 PARAM_MAP = flatten_config(BASE_CONFIG)
 
+def get_C_and_deltaVext(mu_b, M):
+    """根据化学势mu_b和链长M确定势能参数C和delta_Vext"""
+    if mu_b < 2.0:
+        return {'C': 0.05, 'delta_Vext': 0.1}
+    elif mu_b < 4.0:
+        return {'C': 0.1, 'delta_Vext': 0.2}
+    elif mu_b < 8.0:
+        return {'C': 0.2, 'delta_Vext': 0.3}
+    else:
+        return {'C': 0.3, 'delta_Vext': 0.7}
 
+    if M == 8:
+        if mu_b < 2.0:
+            return {'C': 0.05, 'delta_Vext': 0.1}
+        elif mu_b < 4.0:
+            return {'C': 0.1, 'delta_Vext': 0.2}
+        elif mu_b < 8.0:
+            return {'C': 0.2, 'delta_Vext': 0.3}
+        else:
+            return {'C': 0.3, 'delta_Vext': 0.7}
+    else:
+        return {'C': 1.0, 'delta_Vext': 0.0}
+            
 def calculate_derived_params(params):
     """计算依赖参数 (物理公式)"""
     p = params.copy()
-    
+
     # 提取基础变量
     N, M = p["init_N"], p["M"]
     rho, H = p["rho_b"], p["H"]
@@ -135,17 +161,23 @@ def calculate_derived_params(params):
     knot = p["knot_type"]
     mu_b = p["mu_b"]
 
+    # 根据mu_b和M自动确定势能参数C和delta_Vext
+    # 注意：这会覆盖用户提供的C和delta_Vext值
+    pot_params = get_C_and_deltaVext(mu_b, M)
+    p["C"] = pot_params["C"]
+    p["delta_Vext"] = pot_params["delta_Vext"]
+
     # 物理计算
     p["box_xy"] = np.sqrt(N * M / (rho * H))
     p["max_N"] = int(p["box_xy"]**2 * H / M)
-    
+
     # 路径更新
     config_fname = f"{knot}N{N}M{M}H{H:.2f}rho{rho:.2f}.dat"
     p["configuration"] = f"input/init_config_Z/{config_fname}"
 
     #p["output_prefix"] = f"mc_sim_{knot}_H{H:.1f}_rho{rho:.2f}_M{M}"
     p["output_prefix"] = f"mc_sim_{knot}_H{H:.1f}_mub{mu_b:.2f}_M{M}"
-    
+
     # 外势处理
     external_potential_type = p.get("external_potential", "custom")
     if external_potential_type in ["custom", "step"]:
@@ -155,7 +187,7 @@ def calculate_derived_params(params):
         # 从参数中获取C值，如果没有则使用默认值
         # step势能默认C=0.5，custom势能默认C=0.4（保持向后兼容）
 
-        # 获取用户提供的C值
+        # 使用自动确定的C值
         user_C_value = p.get("C")
 
         if external_potential_type == "step":
@@ -171,9 +203,18 @@ def calculate_derived_params(params):
         else:
             # custom势能 - generate_vext_params不再返回C参数，需要手动添加
             C_value = user_C_value if user_C_value is not None else 0.4  # 默认值0.4保持向后兼容
-            p["_Vext_payload"] = generate_vext_params(H, potential_type=external_potential_type)
-            # 添加C参数到Vext_payload中
-            p["_Vext_payload"]["C"] = C_value
+            # 获取n_components参数，默认为4以保持向后兼容
+            n_components = p.get("n_components", 4)
+            # 获取delta_Vext参数，默认为0.0
+            delta_Vext = p.get("delta_Vext", 0.0)
+            p["_Vext_payload"] = generate_vext_params(
+                H,
+                potential_type=external_potential_type,
+                n_components=n_components,
+                C=C_value,  # 直接传递C值
+                delta_Vext=delta_Vext  # 传递平移参数
+            )
+            # 注意：现在generate_vext_params已经包含C和delta_Vext在返回字典中
 
     return p
 

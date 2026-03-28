@@ -50,16 +50,19 @@ def plot_custom_potential(json_file):
 
         # 根据势能类型生成文件名
         if external_potential == 'custom':
-            An = vext_params.get('An', [0.0] * 4)
-            phi_n = vext_params.get('phi_n', [0.0] * 4)
-            Vlin_par = vext_params.get('Vlin_par', [[0.0] * 4, [0.0] * 4])
-            x_tar = vext_params.get('x_tar', [[0.0] * 4, [0.0] * 4])
+            # 获取分量数量，默认为4以保持向后兼容
+            n_components = vext_params.get('n_components', 4)
+            An = vext_params.get('An', [0.0] * n_components)
+            phi_n = vext_params.get('phi_n', [0.0] * n_components)
+            Vlin_par = vext_params.get('Vlin_par', [[0.0] * n_components, [0.0] * n_components])
+            x_tar = vext_params.get('x_tar', [[0.0] * n_components, [0.0] * n_components])
             C = vext_params.get('C', 1.0)
-            print(f"Loaded custom parameters: An={An}, C={C}, H={box_size_z}")
+            delta_Vext = vext_params.get('delta_Vext', 0.0)
+            print(f"Loaded custom parameters: n_components={n_components}, An={An}, C={C}, delta_Vext={delta_Vext}, H={box_size_z}")
 
             # 使用plot_potential函数绘制势能分布图
             output_file = os.path.join(os.path.dirname(json_file), 'custom_potential_plot.png')
-            plot_potential(An, phi_n, box_size_z, Vlin_par, x_tar, C=C, output_file=output_file)
+            plot_potential(An, phi_n, box_size_z, Vlin_par, x_tar, C=C, output_file=output_file, n_components=n_components, delta_Vext=delta_Vext)
 
         elif external_potential == 'step':
             boundaries = vext_params.get('boundaries', [0.0, box_size_z])

@@ -83,3 +83,9 @@ Thumbs.db
 
 # output file
 output/** 
+
+# input file
+input/**
+
+# DataSet
+DataSet/**
