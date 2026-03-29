@@ -146,7 +146,8 @@ PYBIND11_MODULE(pymcpolymer, m) {
              "Directly set external potential beta value")
         // 能量监测方法绑定
         .def("calculate_external_energy", &MuVT_MC_LinearPolymer::calculate_external_energy,
-             "Calculate total external potential energy of all particles");
+             "Calculate total external potential energy of all particles")
+        .def("insert_sphere_in_the_wall", &MuVT_MC_LinearPolymer::insert_sphere_in_the_wall, py::arg("r_try"),"input_z in [-0.5,0.5] or [H-0.5,H+0.5]");
 
     // Bind MuVT_MC_RingPolymer class (inherits from MuVT_MC_LinearPolymer)
     py::class_<MuVT_MC_RingPolymer, MuVT_MC_LinearPolymer>(m, "MuVT_MC_RingPolymer")

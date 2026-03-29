@@ -20,7 +20,7 @@ from external_potential import generate_vext_params
 # ==============================
 
 CURRENT_SCRIPT_DIR = Path(__file__).resolve().parent
-OUTPUT_ROOT = CURRENT_SCRIPT_DIR / "input" / "bulk_Linear_M6"
+OUTPUT_ROOT = CURRENT_SCRIPT_DIR / "input" / "ext_Linear_M6"
 
 
 
@@ -66,7 +66,7 @@ BASE_CONFIG = {
 
 # MUST_INPUT = {"H":6.0,"polymer_type":"Linear","knot_type":"Linear","init_N":64,"external_potential":"custom"}
 # MUST_INPUT = {"H":20.0,"polymer_type":"Ring","knot_type":"Trivial","init_N":64,"external_potential":"custom","n_components":10,"C":None,"delta_Vext":None}
-MUST_INPUT = {"H":20.0,"polymer_type":"Linear","knot_type":"Linear","init_N":64,"external_potential":None}#"external_potentail":"custom","n_components":10,"C":None,"delta_Vext":None} 
+MUST_INPUT = {"H":20.0,"polymer_type":"Linear","knot_type":"Linear","init_N":64,"external_potentail":"custom","n_components":10,"C":None,"delta_Vext":None} 
 # 注意：C和delta_Vext现在通过get_C_and_deltaVext函数根据mu_b和M自动确定
 
 # MUST_INPUT = {"H":6.0,"knot_type":"Linear","init_N":64,"external_potential":"custom"} 
@@ -273,7 +273,7 @@ def main():
             # 确保输出目录存在
             # 动态生成子目录名
             sub_dir_name = f"OUT_{filename.replace('.json', '')}"
-            config["output_params"]["output_dir"] = f"output/{sub_dir_name}" # 写入配置文件的路径
+            config["output_params"]["output_dir"] = f"output/LinearM6/{sub_dir_name}" # 写入配置文件的路径
                 
             file_path = OUTPUT_ROOT / filename
             file_path.parent.mkdir(parents=True, exist_ok=True)

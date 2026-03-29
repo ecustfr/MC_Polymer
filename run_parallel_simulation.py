@@ -108,7 +108,7 @@ def run_single_task(config_path):
         }
 
 def main():
-    default_input_dir = str(SCRIPT_DIR/'input/bulk_Linear_M6' )
+    default_input_dir = str(SCRIPT_DIR/'input/ext_Linear_M6' )
     default_max_processes = 4
     parser = argparse.ArgumentParser(description="Parallel Simulation Runner")
     parser.add_argument('--input-dir', '-i', type = str, default = default_input_dir)# 'input/Linear_configs'

@@ -46,19 +46,6 @@ add_library(MuVTPolymer STATIC
 
 target_link_libraries(MuVTPolymer PRIVATE Utils)
 
-add_library(BulkRingPolymer STATIC src/Bulk_RingPolymer.cpp)
-target_link_libraries(BulkRingPolymer PRIVATE Utils)
-
-add_library(BulkLinearPolymer STATIC src/Bulk_LinearPolymer.cpp)
-target_link_libraries(BulkLinearPolymer PRIVATE Utils)
-
-add_executable(test_bulk_density bulk/bulk_ring/test_bulk_density_final.cpp)
-target_link_libraries(test_bulk_density PRIVATE BulkRingPolymer Utils)
-set_target_properties(test_bulk_density PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/bulk/bulk_ring/)
-
-add_executable(test_bulk_density_linear bulk/bulk_linear/test_bulk_density_final.cpp)
-target_link_libraries(test_bulk_density_linear PRIVATE BulkLinearPolymer Utils)
-set_target_properties(test_bulk_density_linear PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/bulk/bulk_linear/)
 
 # === 添加 Python 模块 ===
 pybind11_add_module(pymcpolymer ${PROJECT_SOURCE_DIR}/src/pybind11_module.cpp)
@@ -92,16 +79,6 @@ if(MSVC)
         /utf-8
     )
     target_compile_options(Utils PRIVATE
-        /MP
-        /W3
-        /utf-8
-    )
-    target_compile_options(BulkRingPolymer PRIVATE
-        /MP
-        /W3
-        /utf-8
-    )
-    target_compile_options(BulkLinearPolymer PRIVATE
         /MP
         /W3
         /utf-8

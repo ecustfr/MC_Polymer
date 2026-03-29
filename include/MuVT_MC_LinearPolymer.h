@@ -121,6 +121,7 @@ public:
     void set_external_potential(std::function<double(const double)> potential, const std::string& name); // 设置外部势能（lambda 表达式版本）
     void set_external_potential(const std::string& name); // 设置外部势能（势能名称版本）
 
+    double insert_sphere_in_the_wall(double z_insert);
 
 protected:
     

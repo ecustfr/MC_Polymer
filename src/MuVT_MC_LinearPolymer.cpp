@@ -2558,3 +2558,59 @@ void MuVT_MC_LinearPolymer::old_delete_move(int k_max, int delete_polymer_index)
 
 }
 
+double MuVT_MC_LinearPolymer::insert_sphere_in_the_wall(double insert_z)
+{
+   std::array<double,3> r_try{0.0,0.0,insert_z};
+   r_try[0] = this->box_size[0]*this->uni_dis(this->gen);
+   r_try[1] = this->box_size[1]*this->uni_dis(this->gen);
+   
+   // [-0.5,0.5] or [H-0.5,H+0.5]
+    int cy = static_cast<int> (floor(r_try[1] / this->real_rcut[1]));
+    int cx = static_cast<int> (floor(r_try[0] / this->real_rcut[0]));
+    std::array<int,2> z_int = {0,1};
+
+    if (insert_z <= 0.5 && insert_z >= -0.5)
+    {
+        z_int = {0,1};
+    }
+    else if (insert_z <= this->box_size[2] + 0.5 && insert_z >= this->box_size[2] - 0.5)
+    {
+        z_int = {this->cell_num[2]-1,this->cell_num[2]-2};
+    }
+    else
+    {
+        throw std::invalid_argument("insert particle z is out of wall range");
+        return -1; // 插入位置不合法
+    }
+    for(int z : z_int)
+    {
+        for(int y = cy-1; y<= cy+1 ; y++)
+        {
+            for(int x = cx-1 ; x <= cx+1 ; x++)
+            {
+                int real_x = (x%this->cell_num[0] + this->cell_num[0]) % this->cell_num[0]; 
+                int real_y = (y%this->cell_num[1] + this->cell_num[1]) % this->cell_num[1];
+
+                int cell_idx = real_x + real_y*this->cell_num[0] + z*this->cell_num[0]*this->cell_num[1]; 
+                    
+                // 遍历该格子的链表
+                int p_id = this->cl_head[cell_idx] ; 
+                // std::cout << 0 << p_id << std::endl;
+                
+                while( p_id != -1 && p_id < this->MN_now)
+                {
+
+                    if(this->overlap_other_monomer_one( r_try.data(),this->r_total[p_id])) // 会对第二个位置检测 是否处在 墙内，第一个粒子单体不会检测
+                    {
+                        return 0; // 碰撞发生
+                    }
+
+                    // std::cout << 3  <<p_id << std::endl;
+                    p_id = this->cl_list[p_id]; // 下一个粒子索引
+                    // std::cout << 4  <<p_id << std::endl;
+                }
+            }
+        }
+    }
+    return 1; // 插入成功
+}

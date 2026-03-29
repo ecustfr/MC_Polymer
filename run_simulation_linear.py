@@ -31,8 +31,7 @@ from system_analyzer import (
     DistributionAnalyzer,
     GlobalPropertyAnalyzer,
     cal_mono_density_profile,
-    cal_W,
-    cal_wz_fix_z
+    cal_insert_wall
 )
 from data_recorder import DataRecorder
 
@@ -100,8 +99,7 @@ def run_simulation(config):
     )
 
     # 默认行为：外势beta=1.0
-    # mc_sys.set_external_beta(1.0)
-    # print("Using default beta_ext=1.0")
+
 
     # Set external potential using the unified function
     setup_external_potential(mc_sys, input_params, config, output_dir)
@@ -120,6 +118,14 @@ def run_simulation(config):
     H = mc_sys.get_H()
     M = mc_sys.get_M()
     # rho_profile = DistributionAnalyzer(name = "rho_two_profile", dz=dz , bins=n_bins)
+    
+    z_list_1 = np.arange(-0.5,0.5,dz)
+    z_list_2 = np.arange(H-0.5,H+0.5,dz)
+    z_list = np.concatenate( (z_list_1,z_list_2),axis=0)
+    wall_bins = z_list.size
+
+    mu_ex_wall = DistributionAnalyzer(name = 'mu_ex_wall',dz=dz, bins = wall_bins)
+
 
     rho_all_profile = np.zeros([n_bins,M])
 
@@ -158,7 +164,7 @@ def run_simulation(config):
                 r = mc_sys.r_total
                 rho_all_profile += cal_all_monomer_density(r,dz,n_bins,M,bin_volume)
                 n_sample = n_sample+1 
-
+                mu_ex_wall.accumulate(mc_sys,lambda sim,dz,wall_bins: cal_insert_wall(sim,z_list))
 
 
 
@@ -171,15 +177,17 @@ def run_simulation(config):
         n_now = mc_sys.get_N_now()
         rho_all_profile = rho_all_profile/n_sample
         n_sample = 0
-
+        
 ## ---------------------------------------------------------------------------------------------------------------------------------------------------
 # Save to only-data file
         # recorder.save(f"{output_params['output_dir']}/block_{block}_rg_values.dat", block_avg_rg_values[:n_now])
         # recorder.save(f"{output_params['output_dir']}/block_{block}_{rho_profile.name}.dat", block_avg_density_profile)
         #recorder.save(f"{output_params['output_dir']}/block_{block}_{Wz_insert.name}.dat", Wz_insert_average)
         recorder.save(f"{output_params['output_dir']}/block_{block}_rho_profile.dat",rho_all_profile)
+        rho_all_profile.fill(0)
 
-
+        recorder.save(f"{output_params['output_dir']}/block_{block}_mu_ex_wall.dat",-np.log(mu_ex_wall.average))
+        mu_ex_wall.reset()
 ## ---------------------------------------------------------------------------------------------------------------------------------------------------
 # save to ensemble average file
         trans_acceptance = mc_sys.get_trans_acceptance()

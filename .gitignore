@@ -86,6 +86,7 @@ output/**
 
 # input file
 input/**
+!input/init_config_Z/
 
 # DataSet
 DataSet/**

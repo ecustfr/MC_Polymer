@@ -252,8 +252,6 @@ def cal_density_profile(sim: Any, dz: float, n_bins: int) -> np.ndarray:
     
     return profile
 
-
-
 def cal_mono_density_profile(sim: Any, dz: float, n_bins: int, monomer_index: int) -> np.ndarray:
     """
     计算系统中特定单体的密度分布。数据结构假设为：[链1单体0, 1...M-1, 链2单体0, 1...M-1, ...]
@@ -287,7 +285,6 @@ def cal_mono_density_profile(sim: Any, dz: float, n_bins: int, monomer_index: in
     profile[:, 0] = 1.0                   # 这一帧的采样权重记为 1
     
     return profile
-
 
 def cal_all_monomer_density(sim:Any,dz:float,n_bins:int,M:int)->np.ndarray:
     
@@ -366,5 +363,18 @@ def cal_W_ring(sim:Any,k_max:int):
 
 def cal_W_ring_z(sim:Any,z:float,k_max:int):
     return sim.get_W_insert_ring_z(z,k_max)
+
+def cal_insert_wall(sim:Any,z_list:np.ndarray) -> np.ndarray:
+    #z_list_1 = np.arange(-0.5,0.5+0.1*dz,dz)
+    #z_list_2 = np.arange(H-0.5,H+0.5+0.1*dz,dz)
+    #z_list = np.concatenate( (z_list_1,z_list_2),axis=0)
+    # np.testing.assert_array_equal(z_list.size,bins,err_msg="error in cal_insert_wall")
+    val = np.zeros_like(z_list)
+    for  i,z in enumerate(z_list):
+        val[i] = sim.insert_sphere_in_the_wall(z)
+
+    return val 
+
+
 if __name__ == "__main__":
     pass
