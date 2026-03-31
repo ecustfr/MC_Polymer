@@ -50,22 +50,10 @@ def _get_rho_total_ring(output_dir):
 
 
 def _get_rho_total_linear(output_dir):
-    block_files = utils.find_block_files(output_dir)
-    if len(block_files) < 2:
-        print(f"警告: 至少需要2个block文件，但只找到 {len(block_files)} 个")
-        return None
-    
-    densities = None
-    num = 0
-    for block_file in block_files[1:]:  # ignore the first block   
-        density = utils.load_total_density_profile(block_file)
-        num = num +1
-        densities = density if densities is None else  densities+density
+    rho_array = utils._get_block_average(output_dir=output_dir,pattern='block_*_rho_profile.dat')
+    return rho_array
 
-    # 转换为numpy数组
-    densities_array = np.array(densities)  # 形状: (n_bins,M)
-    densities_array /= num
-    return densities_array
+
 
 def pre_process_json_npz(json_path):
     """

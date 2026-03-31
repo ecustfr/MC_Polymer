@@ -189,7 +189,7 @@ def find_output_json_from_input(input_json_path):
 
 def main():
     parser = argparse.ArgumentParser(description='处理output文件夹中内容并再计算的整合功能')
-    parser.add_argument('--input-dir', default=os.path.join('input', 'bulk_Linear_M6'), #INPUT2
+    parser.add_argument('--input-dir', default=os.path.join('input', 'Padding_M6_input'), #INPUT2
                        help='input目录中的JSON配置文件目录')
     parser.add_argument('--overwrite', action='store_true',default=True,
                        help='即使NPZ文件已存在也重新生成后处理文件')
@@ -199,7 +199,7 @@ def main():
                        help='失败文件日志输出路径（JSON格式），如果不指定则不保存')
     parser.add_argument('--extra-field', action='append', default=[],
                        help='要添加的额外字段，格式为"key=value"或"section.key=value"，可多次使用')
-    parser.add_argument('--no-ml', action='store_false', dest='ml', default=False,
+    parser.add_argument('--no-ml', action='store_false', dest='ml', default=True,
                        help='不应用于机器学习，只生成NPZ文件，不进行recal和数据集分配')
 
     args = parser.parse_args()

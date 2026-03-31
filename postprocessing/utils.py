@@ -101,13 +101,14 @@ def resolve_output_dir(json_config, json_path):
     """
     output_dir = json_config['output_params']['output_dir']
 
+    """
     # 确保output_dir是绝对路径（相对于项目根目录）
     if not os.path.isabs(output_dir):
         # 假设JSON文件路径相对于项目根目录，计算绝对路径
         # 项目根目录是JSON文件父目录的父目录的父目录
         project_root = Path(json_path).parent.parent.parent
         output_dir = os.path.join(project_root, output_dir)
-
+    """
     return output_dir
 
 
@@ -143,6 +144,26 @@ def get_npz_path_from_json(json_path):
     else:
         # 如果都不存在，返回新格式路径（用于创建新文件）
         return npz_file_new
+
+
+def _get_block_average(output_dir, pattern):
+    block_files = find_block_files(output_dir,pattern=pattern)
+    if len(block_files) < 2:
+        print(f"警告: 至少需要2个block文件，但只找到 {len(block_files)} 个")
+        return None
+    
+    datas = None
+    num = 0
+    for block_file in block_files[1:]:  # ignore the first block   
+        density = load_total_density_profile(block_file)
+        num = num +1
+        datas = density if datas is None else  datas+density
+
+    # 转换为numpy数组
+    datas_array = np.array(datas)  # 形状: (n_bins,M)
+    datas_array /= num
+    return datas_array
+
 
 
 def ensure_directory_exists(dir_path):

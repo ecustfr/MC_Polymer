@@ -113,7 +113,7 @@ def run_simulation(config):
 
     # Initialize analyzers
     dz = simulation_params['dz']  # z-axis interval for density distribution
-    n_bins = int(input_params['H'] / dz)  # Number of bins for density distribution
+    n_bins = round(input_params['H'] / dz)  # Number of bins for density distribution
 
     H = mc_sys.get_H()
     M = mc_sys.get_M()
@@ -122,6 +122,7 @@ def run_simulation(config):
     z_list_1 = np.arange(-0.5,0.5,dz)
     z_list_2 = np.arange(H-0.5,H+0.5,dz)
     z_list = np.concatenate( (z_list_1,z_list_2),axis=0)
+    recorder.save(f"{output_params['output_dir']}/z_list_mu_ex_wall.dat",z_list)
     wall_bins = z_list.size
 
     mu_ex_wall = DistributionAnalyzer(name = 'mu_ex_wall',dz=dz, bins = wall_bins)

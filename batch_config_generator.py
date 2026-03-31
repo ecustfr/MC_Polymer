@@ -32,7 +32,7 @@ BASE_CONFIG = {
         "configuration": "input/test_1.dat",
         "mu_b": 0.870821, 
         "M": 40, 
-        "init_N": 64, 
+        "init_N": 27, 
         "rho_b": 0.1, #only for NVT, no meaning for muVT   
         "box_xy": 17.8886, 
         "H": 20.0, 
@@ -43,7 +43,7 @@ BASE_CONFIG = {
     },
     "simulation_params": 
     {
-        "EPS_TRANS": 0.02, 
+        "EPS_TRANS": 0.05, 
         "ROT_RATIO": 0.3, 
         "K_MAX": 10,
         "sample_interval": 5, 
@@ -66,37 +66,48 @@ BASE_CONFIG = {
 
 # MUST_INPUT = {"H":6.0,"polymer_type":"Linear","knot_type":"Linear","init_N":64,"external_potential":"custom"}
 # MUST_INPUT = {"H":20.0,"polymer_type":"Ring","knot_type":"Trivial","init_N":64,"external_potential":"custom","n_components":10,"C":None,"delta_Vext":None}
-MUST_INPUT = {"H":20.0,"polymer_type":"Linear","knot_type":"Linear","init_N":64,"external_potentail":"custom","n_components":10,"C":None,"delta_Vext":None} 
+MUST_INPUT = {"polymer_type":"Linear","knot_type":"Linear","H_input":6,"init_N":27,"external_potentail":"custom","n_components":10,"C":None,"delta_Vext":None} 
 # 注意：C和delta_Vext现在通过get_C_and_deltaVext函数根据mu_b和M自动确定
 
 # MUST_INPUT = {"H":6.0,"knot_type":"Linear","init_N":64,"external_potential":"custom"} 
 
 # 耦合变量
-COUPLED_GROUPS = [{"EPS_TRANS":0.05,"K_MAX":10}]
-for item in COUPLED_GROUPS:
-     item.update(MUST_INPUT)
+# COUPLED_GROUPS = [{"EPS_TRANS":0.05,"K_MAX":10}]
 
 
 INDEPENDENT_VARS = {
     "M":[6],
-    "rho_b":[0.1],
-    "mu_b":[8.0,5.0,0.0]
+    "rho_b":[0.1]
+    #"mu_b":[8.0,5.0,0.0]
 }
     #mu_b = 5 : rhob_seg = 0.42
     #mu_b = 2 : rhob_seg = 0.344
     #mu_b = -3: rhob_seg = 0.1655
 
-"""
+
+
+num_sample = 5
+H_array = np.round(np.random.uniform(6,20,size=num_sample),1)
+mu_b_array = np.random.uniform(-1.0,1.0,size=num_sample)
+
+
 COUPLED_GROUPS = [
-    {"H": 20.0, "rho_b": 0.1, "M": 40, "EPS_TRANS": 0.1},
-    {"H": 20.0, "rho_b": 0.3, "M": 40, "EPS_TRANS": 0.05},
-    {"H": 20.0, "rho_b": 0.5, "M": 40, "EPS_TRANS": 0.02}
+    {
+        "H":float(h),
+        "mu_b":float(mu_b)
+    }
+    for h,mu_b in zip(H_array,mu_b_array)
 ]
+for item in COUPLED_GROUPS:
+     item.update(MUST_INPUT)
+
+
+"""
 INDEPENDENT_VARS = {
     "knot_type": ["Trefoil", "4_1Knot", "5_1Knot"],
 }
-
 """
+
 
 # 独立变量
 
@@ -153,7 +164,7 @@ def get_C_and_deltaVext(mu_b, M):
 def calculate_derived_params(params):
     """计算依赖参数 (物理公式)"""
     p = params.copy()
-
+    H_input = p["H_input"]
     # 提取基础变量
     N, M = p["init_N"], p["M"]
     rho, H = p["rho_b"], p["H"]
@@ -168,11 +179,12 @@ def calculate_derived_params(params):
     p["delta_Vext"] = pot_params["delta_Vext"]
 
     # 物理计算
-    p["box_xy"] = np.sqrt(N * M / (rho * H))
+    p["box_xy"] = np.sqrt(N * M / (rho * H_input))
     p["max_N"] = int(p["box_xy"]**2 * H / M)
 
     # 路径更新
-    config_fname = f"{knot}N{N}M{M}H{H:.2f}rho{rho:.2f}.dat"
+    
+    config_fname = f"{knot}N{N}M{M}H{H_input:.2f}rho{rho:.2f}.dat"
     p["configuration"] = f"input/init_config_Z/{config_fname}"
 
     #p["output_prefix"] = f"mc_sim_{knot}_H{H:.1f}_rho{rho:.2f}_M{M}"
